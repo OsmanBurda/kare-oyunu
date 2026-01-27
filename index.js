@@ -10,7 +10,7 @@ let rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
-        const rName = data.roomName;
+        const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
         rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id };
         joinProcess(socket, rName, data.userName);
     });
@@ -19,15 +19,28 @@ io.on('connection', (socket) => {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
         let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-        r.players[socket.id] = { x: 185, y: 185, name: uName, color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: hpVal, lastFire: 0, lastDir: 'up' };
+        r.players[socket.id] = { 
+            x: 185, y: 185, name: uName || "Osman", 
+            color: '#' + Math.floor(Math.random()*16777215).toString(16), 
+            hp: hpVal, maxHp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up' 
+        };
         socket.emit('joined', { isLeader: (r.leader === socket.id) });
         io.to(rName).emit('updatePlayerList', Object.values(r.players).map(p => ({name: p.name})));
     }
 
+    socket.on('specialPower', () => {
+        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let p = r.players[socket.id];
+        if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
+            p.lastBlast = Date.now();
+        }
+    });
+
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id];
-        let cd = (r.mode === 'savas' ? 1000 : 250); // SAVAŞ 1 SN COOLDOWN
+        let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
             if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
@@ -41,8 +54,20 @@ io.on('connection', (socket) => {
     socket.on('move', (dir) => {
         let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
-        if (dir === 'up') p.y -= 20; if (dir === 'down') p.y += 20;
-        if (dir === 'left') p.x -= 20; if (dir === 'right') p.x += 20;
+        
+        let speed = 20;
+        let nextX = p.x;
+        let nextY = p.y;
+
+        if (dir === 'up') nextY -= speed;
+        if (dir === 'down') nextY += speed;
+        if (dir === 'left') nextX -= speed;
+        if (dir === 'right') nextX += speed;
+
+        // ALAN DIŞINA ÇIKMA ENGELİ (0-375 arası, kare boyutu 25 olduğu için)
+        if(nextX >= 0 && nextX <= 375) p.x = nextX;
+        if(nextY >= 0 && nextY <= 375) p.y = nextY;
+        
         p.lastDir = dir;
     });
 
@@ -55,15 +80,27 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => { if(socket.roomName && rooms[socket.roomName]) { delete rooms[socket.roomName].players[socket.id]; if(Object.keys(rooms[socket.roomName].players).length === 0) delete rooms[socket.roomName]; } });
 });
 
-// ANA DÖNGÜ - SADECE BURADA HESAPLANIR
 setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n]; if(r.status !== 'playing') continue;
         if(r.mode === 'zombi') {
-            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*380, y: 0});
-            r.zombies.forEach(z => {
+            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0, hp: 2});
+            r.zombies.forEach((z, zi) => {
                 let targets = Object.values(r.players).filter(p => p.hp > 0);
-                if(targets[0]) { z.x += (z.x < targets[0].x ? 0.7 : -0.7); z.y += (z.y < targets[0].y ? 0.7 : -0.7); if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05; }
+                if(targets[0]) {
+                    let zNextX = z.x + (z.x < targets[0].x ? 0.8 : -0.8);
+                    let zNextY = z.y + (z.y < targets[0].y ? 0.8 : -0.8);
+                    // Zombi Alan Kontrolü
+                    if(zNextX >= 0 && zNextX <= 375) z.x = zNextX;
+                    if(zNextY >= 0 && zNextY <= 375) z.y = zNextY;
+                    if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05;
+                }
+                r.bullets.forEach((b, bi) => {
+                    if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) {
+                        z.hp -= 1; r.bullets.splice(bi, 1);
+                        if(z.hp <= 0) r.zombies.splice(zi, 1);
+                    }
+                });
             });
         }
         r.bullets.forEach((b, i) => {
