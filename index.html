@@ -3,102 +3,65 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
-        input, select { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
-        .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
-        .move-btn { width: 60px; height: 60px; background: #444; color: white; border-radius: 12px; border: none; font-size: 24px; }
     </style>
 </head>
 <body>
-    <div id="howToPlayPanel" class="overlay" style="display:none; z-index:500;">
-        <h2>NASIL OYNANIR?</h2>
-        <div style="text-align:left; max-width:280px; background:#333; padding:15px; border-radius:10px; font-size:13px;">
-            <p>🎮 <b>Hareket:</b> W,A,S,D / Oklar</p>
-            <p>🔫 <b>Ateş:</b> Space (Savaş/Bayrak: 1sn beklemeli)</p>
-            <p>🚩 <b>Bayrak:</b> Altın kareyi kap ve 500 puana ulaş!</p>
-            <p>💥 <b>Güç:</b> "B" Tuşu (Zombi Modu)</p>
-            <p>💀 <b>Can:</b> Bayrak modunda sadece 1 canın var!</p>
-        </div>
-        <button class="btn" onclick="document.getElementById('howToPlayPanel').style.display='none'">ANLADIM</button>
-    </div>
-
     <div id="gameOverlay" class="overlay">
         <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="İsmin...">
-        <select id="teamSelect"><option value="Kırmızı">Kırmızı Takım</option><option value="Mavi">Mavi Takım</option></select>
-        <button class="btn" onclick="createRoom()">ODA KUR</button>
-        <button class="btn" style="background:#2196F3" onclick="document.getElementById('howToPlayPanel').style.display='flex'">NASIL OYNANIR?</button>
-        <div id="roomListContainer" style="margin:10px 0; width:100%"></div>
-        <input type="text" id="newRoomName" placeholder="Oda Adı">
-        <select id="modeSelect">
-            <option value="zombi">Zombi</option><option value="savas">Savaş</option>
-            <option value="labirent">Labirent</option><option value="bayrak">Bayrak Kapmaca</option>
+        <input type="text" id="nameInput" placeholder="İsmin..." style="padding:10px; width:240px; margin:5px;">
+        <select id="modeSelect" onchange="document.getElementById('tDiv').style.display=(this.value==='bayrak'?'block':'none')" style="padding:10px; width:240px; margin:5px;">
+            <option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option><option value="bayrak">Bayrak Kapmaca</option>
         </select>
+        <div id="tDiv" style="display:none;"><select id="teamSelect" style="padding:10px; width:240px;"><option value="Kırmızı">Kırmızı</option><option value="Mavi">Mavi</option></select></div>
+        <button class="btn" onclick="socket.emit('createRoom', { roomName: 'Oda'+Math.random(), userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value, team: document.getElementById('teamSelect').value })">ODA KUR</button>
+        <button class="btn" style="background:#2196F3" onclick="alert('Zombi: Hayatta kal!\nSavaş: Diğerlerini vur!\nBayrak: Rakip bayrağı üssüne getir (3 Puan)!')">NASIL OYNANIR?</button>
     </div>
 
-    <div id="lobbyOverlay" class="overlay" style="display:none;">
-        <h2 id="lobbyTitle">Lobi</h2>
-        <button id="startBtn" class="btn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">BAŞLAT</button>
-    </div>
+    <div id="lobby" class="overlay" style="display:none;"><h2>Lobi</h2><button class="btn" id="sBtn" style="display:none" onclick="socket.emit('startGameSignal')">BAŞLAT</button></div>
 
-    <div id="status">Can: 0 | Puan: 0</div>
+    <div id="status">Can: 0</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-
-    <div class="controls-grid">
-        <button style="grid-area: up" class="move-btn" onclick="socket.emit('move','up')">▲</button>
-        <button style="grid-area: left" class="move-btn" onclick="socket.emit('move','left')">◀</button>
-        <button style="grid-area: right" class="move-btn" onclick="socket.emit('move','right')">▶</button>
-        <button style="grid-area: down" class="move-btn" onclick="socket.emit('move','down')">▼</button>
+    
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); width:180px; margin:auto; gap:5px;">
+        <div ontouchstart="socket.emit('move','up')">▲</div><div ontouchstart="socket.emit('move','left')">◀</div>
+        <div ontouchstart="socket.emit('move','right')">▶</div><div ontouchstart="socket.emit('move','down')">▼</div>
+        <div style="background:red" ontouchstart="socket.emit('fire')">ATEŞ</div><div style="background:purple" ontouchstart="socket.emit('areaBlast')">B</div>
     </div>
-    <button class="btn" style="width:120px; background:#f44336" onclick="socket.emit('fire')">ATEŞ</button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let activeMode = ''; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0;
+        socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
+        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
 
-        document.addEventListener('touchstart', (e) => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
-
-        socket.on('roomList', (rooms) => {
-            const container = document.getElementById('roomListContainer'); container.innerHTML = "";
-            rooms.forEach(r => { container.innerHTML += `<button class="btn" style="background:#333" onclick="joinRoom('${r.name}')">${r.name} (${r.count})</button>`; });
-        });
-
-        function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('newRoomName').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value, team: document.getElementById('teamSelect').value }); }
-        function joinRoom(rName) { socket.emit('joinExistingRoom', { roomName: rName, userName: document.getElementById('nameInput').value, team: document.getElementById('teamSelect').value }); }
-        
-        socket.on('joined', (data) => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobbyOverlay').style.display='flex'; if(data.isLeader) document.getElementById('startBtn').style.display='block'; });
-        socket.on('gameStarted', () => { document.getElementById('lobbyOverlay').style.display='none'; });
-
-        window.addEventListener('keydown', (e) => {
+        window.addEventListener('keydown', e => {
             let k = e.key.toLowerCase();
-            if(['w','arrowup'].includes(k)) socket.emit('move', 'up');
-            if(['s','arrowdown'].includes(k)) socket.emit('move', 'down');
-            if(['a','arrowleft'].includes(k)) socket.emit('move', 'left');
-            if(['d','arrowright'].includes(k)) socket.emit('move', 'right');
-            if(e.code === 'Space') socket.emit('fire');
-            if(k === 'b' && activeMode === 'zombi') { socket.emit('areaBlast'); }
+            if(k==='w') socket.emit('move','up'); if(k==='s') socket.emit('move','down');
+            if(k==='a') socket.emit('move','left'); if(k==='d') socket.emit('move','right');
+            if(e.code==='Space') socket.emit('fire'); if(k==='b') socket.emit('areaBlast');
         });
 
-        socket.on('state', (d) => {
-            activeMode = d.mode; ctx.clearRect(0,0,400,400);
+        socket.on('state', d => {
+            ctx.clearRect(0,0,400,400);
             ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            if(d.mode === 'bayrak' && d.flag && !d.flag.carrier) { ctx.fillStyle = "gold"; ctx.fillRect(d.flag.x, d.flag.y, 25, 25); }
-            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
+            if(d.mode === 'bayrak') {
+                ctx.fillStyle = "rgba(255,0,0,0.2)"; ctx.fillRect(0,0,60,60);
+                ctx.fillStyle = "rgba(0,0,255,0.2)"; ctx.fillRect(340,340,60,60);
+                ctx.fillStyle = "red"; ctx.fillRect(d.redFlag.x, d.redFlag.y, 20, 20);
+                ctx.fillStyle = "blue"; ctx.fillRect(d.blueFlag.x, d.blueFlag.y, 20, 20);
+                document.getElementById('status').innerText = `K: ${d.scores.Kırmızı} | M: ${d.scores.Mavi}`;
+            }
             (d.bullets||[]).forEach(b=>{ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,8,8);});
+            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
             for(let id in d.players){
-                let p = d.players[id]; if(!p.active || p.hp <= 0) continue;
-                ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25);
-                if(d.flag && d.flag.carrier === id) { ctx.strokeStyle="gold"; ctx.lineWidth=3; ctx.strokeRect(p.x,p.y,25,25); }
-                if(id===socket.id) document.getElementById('status').innerText = "Can: "+p.hp + " | Puan: "+p.score;
+                let p = d.players[id]; if(p.hp > 0) { ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); if(id===socket.id && d.mode!=='bayrak') document.getElementById('status').innerText="Can: "+p.hp; }
             }
         });
-        socket.on('winner', (m) => { alert(m); location.reload(); });
-        socket.on('err', (m) => alert(m));
+        socket.on('winner', m => { alert(m); location.reload(); });
     </script>
 </body>
 </html>
