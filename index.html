@@ -1,26 +1,62 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html>
 <head>
-    <meta charset="UTF-8">
     <title>OSMAN PRO 2026</title>
     <style>
         body { margin: 0; background: #000; color: #0f0; overflow: hidden; font-family: sans-serif; }
-        #admin-panel { position: absolute; top: 10px; left: 10px; border: 2px solid gold; padding: 10px; background: rgba(0,0,0,0.9); z-index: 100; color: gold; }
-        #oyuncu-listesi { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #0f0; }
+        #osman-ui { position: absolute; top: 10px; left: 10px; border: 2px solid gold; padding: 10px; background: rgba(0,0,0,0.9); z-index: 100; color: gold; }
+        #list { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); padding: 10px; border: 1px solid #0f0; }
+        canvas { display: block; background: #111; margin: auto; border: 5px solid #333; }
     </style>
 </head>
 <body>
-    <div id="admin-panel">
-        <h3 style="margin:0">OSMAN ADMIN</h3>
-        <div>CAN: 3 | MOD: Bayrak/Savaş</div>
+    <div id="osman-ui">
+        <b>OSMAN ADMIN PANEL</b><br>
+        CAN: 3 | GÜÇ: B
     </div>
-    <div id="oyuncu-listesi">
-        <b>AKTİF OYUNCULAR:</b>
-        <ul id="users"></ul>
-    </div>
-    <canvas id="gameCanvas"></canvas>
+    <div id="list"><b>AKTİF OYUNCULAR:</b><ul id="users"></ul></div>
     
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
     <script src="/socket.io/socket.io.js"></script>
-    <script src="index.js"></script>
+    <script>
+        const socket = io();
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // Giriş yapınca odayı otomatik kur/katıl (Test için)
+        socket.emit('createRoom', { roomName: "OsmanOda", mode: "savas", userName: "Osman" });
+
+        socket.on('state', (data) => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Oyuncuları Çiz
+            Object.values(data.players).forEach(p => {
+                ctx.fillStyle = (p.id === socket.id) ? "gold" : "red";
+                ctx.fillRect(p.x, p.y, 25, 25);
+                ctx.fillStyle = "white";
+                ctx.fillText(p.name + " (HP: " + Math.ceil(p.hp) + ")", p.x - 10, p.y - 5);
+            });
+
+            // Mermileri Çiz
+            data.bullets.forEach(b => {
+                ctx.fillStyle = "yellow";
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        });
+
+        // Tuş Kontrolleri (Osman'ın Kalıcı Ayarları)
+        window.addEventListener("keydown", (e) => {
+            const key = e.key.toLowerCase();
+            if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(key)) {
+                let dir = key.replace('arrow','');
+                socket.emit('move', dir);
+            }
+            if(key === ' ') socket.emit('fire'); // 4-Yönlü Ateş
+            if(key === 'b') socket.emit('specialPower'); // B Tuşu Gücü
+        });
+    </script>
 </body>
 </html>
