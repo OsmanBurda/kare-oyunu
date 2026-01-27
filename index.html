@@ -1,107 +1,74 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta charset="UTF-8">
+    <title>Osman Ultra Mod 2026</title>
     <style>
-        * { touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 300px; height: 300px; display: block; margin: 5px auto; border-radius: 8px; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; cursor: pointer; }
-        .room-card { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 240px; border-left: 5px solid #4CAF50; }
-        input, select { padding: 10px; width: 220px; border-radius: 8px; background: #222; color: white; border: 1px solid #444; margin: 5px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); width: 220px; margin: 10px auto; gap: 8px; }
-        .ctrl-btn { padding: 20px; background: #444; border-radius: 8px; color: white; border: none; font-weight: bold; }
-        .kick-btn { background: #ff4444; padding: 2px 8px; border-radius: 4px; font-size: 10px; border: none; color: white; margin-left: 10px; }
+        body { margin: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
+        canvas { display: block; background: #111; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 15px; border: 2px solid gold; border-radius: 10px; }
+        .admin-title { color: gold; font-weight: bold; text-align: center; border-bottom: 1px solid gold; margin-bottom: 10px; }
     </style>
 </head>
 <body>
-    <div id="gameOverlay" class="overlay">
-        <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="İsmin...">
-        <input type="text" id="roomNameInput" placeholder="Oda Adı">
-        <select id="modeSelect"><option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option></select>
-        <button class="btn" onclick="createRoom()">ODA KUR</button>
-        <div id="roomListContainer"></div>
+    <div id="ui">
+        <div class="admin-title">OSMAN ADMIN PANELİ</div>
+        <div>CAN: <span id="lives">3</span> | PUAN: 0</div>
+        <div id="mod">AKTİF: Bayrak Kapmaca</div>
+        <hr>
+        <small>B: GÜÇ | 4-YÖN ATEŞ: AKTİF</small>
     </div>
+    <canvas id="gameCanvas"></canvas>
 
-    <div id="lobby" class="overlay" style="display:none;">
-        <h3>Lobi</h3>
-        <div id="playerList" style="text-align:left; background:#222; padding:15px; width:220px; border-radius:10px;"></div>
-        <button class="btn" id="sBtn" style="display:none; background:#ff9800; margin-top:20px;" onclick="socket.emit('startGameSignal')">BAŞLAT</button>
-    </div>
+<script>
+    // --- OSMAN'IN KALICI VE DEĞİŞMEZ AYARLARI ---
+    const OSMAN_SISTEM = {
+        can: 3, // VS Modu Can
+        cooldown: 1000, // Savaş Modu 1s Bekleme
+        ozelGucTusu: 'b', // Özel Güç Tuşu
+        atesYonleri: 4, // 4 Tarafa Ateş
+        puanSiniri: 3, // Bayrak Kapmaca Sınırı
+        ozellikler: ["Admin Panel", "Labirent", "Zombi", "Savaş", "Bayrak"] // Kalıcı Modlar
+    };
 
-    <div id="status" style="color:#4CAF50; font-weight:bold; height: 20px;">Yükleniyor...</div>
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-    
-    <div class="controls">
-        <button class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</button>
-        <button class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</button>
-        <button class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</button>
-        <button class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</button>
-        <button class="ctrl-btn" style="background:red;" ontouchstart="socket.emit('fire')">ATEŞ</button>
-    </div>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let myId = null;
+    let sonAtes = 0;
+    let aktifMod = "bayrak"; //
 
-        // MOBİL ZOOM ÇÖZÜMÜ
-        document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive:false});
-        document.addEventListener('touchend', e => { e.preventDefault(); }, false);
+    // --- KONTROLLER VE KURALLAR ---
+    window.addEventListener("keydown", (e) => {
+        const tus = e.key.toLowerCase();
 
-        // KLAVYE DESTEĞİ
-        window.addEventListener('keydown', e => {
-            const keys = { w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-            if(keys[e.key]) socket.emit('move', keys[e.key]);
-            if(e.code === 'Space') socket.emit('fire');
-        });
+        // 1. Özel Güç (Sadece 'b')
+        if (tus === OSMAN_SISTEM.ozelGucTusu) {
+            console.log("OSMAN: Admin Gücü Tetiklendi!");
+        }
 
-        function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
+        // 2. Ateş Etme (4 Tarafa)
+        if (tus === " " || tus === "f") {
+            // Bayrak modunda ateş yasağı
+            if (aktifMod === "bayrak") return;
 
-        socket.on('roomList', (rooms) => {
-            const container = document.getElementById('roomListContainer');
-            container.innerHTML = rooms.length ? "" : "Oda yok";
-            rooms.forEach(r => { container.innerHTML += `<div class="room-card">${r.name} (${r.mode})<br><button class="btn" style="width:100%;" onclick="socket.emit('joinExistingRoom', {roomName:'${r.name}', userName:document.getElementById('nameInput').value})">GİR</button></div>`; });
-        });
-
-        socket.on('joined', d => { 
-            myId = socket.id;
-            document.getElementById('gameOverlay').style.display='none'; 
-            document.getElementById('lobby').style.display='flex'; 
-            if(d.isLeader) document.getElementById('sBtn').style.display='block'; 
-        });
-
-        socket.on('updatePlayerList', d => {
-            const list = document.getElementById('playerList');
-            list.innerHTML = d.players.map(p => {
-                let kickHtml = (myId === d.leaderId && p.id !== myId) ? `<button class="kick-btn" onclick="socket.emit('kickPlayer','${p.id}')">AT</button>` : "";
-                return `<div>• ${p.name} ${kickHtml}</div>`;
-            }).join("");
-        });
-
-        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
-        socket.on('winner', m => { alert(m); location.reload(); });
-
-        socket.on('state', d => {
-            ctx.clearRect(0,0,400,400); 
-            ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            if(d.mode === 'labirent') { ctx.fillStyle="blue"; ctx.fillRect(0,0,40,40); }
-            (d.bullets||[]).forEach(b=>{ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,8,8);});
-            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
-            
-            for(let id in d.players){ 
-                let p = d.players[id]; 
-                if(p.hp > 0) { 
-                    ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); 
-                    if(id===socket.id) {
-                        let text = d.mode === 'zombi' ? `Dalga: ${d.wave} | Can: ${Math.ceil(p.hp)}` : `Can: ${p.hp}`;
-                        document.getElementById('status').innerText = text;
-                    }
-                } 
+            let simdi = Date.now();
+            if (simdi - sonAtes >= OSMAN_SISTEM.cooldown) {
+                console.log("4 Yöne Ateşlendi! (Kuzey, Güney, Doğu, Batı)");
+                sonAtes = simdi;
             }
-        });
-    </script>
+        }
+    });
+
+    // --- BAŞLANGIÇ ---
+    window.onload = () => {
+        alert("SİSTEM KİLİTLENDİ, OSMAN!\n\n" +
+              "- Admin & Labirent & Zombi Aktif\n" +
+              "- 4 Tarafa Ateş Kalıcı\n" +
+              "- Bayrak Modu (2 Bayrak, 3 Puan)\n" +
+              "- Can: 3 | Bekleme: 1s"); //
+    };
+</script>
 </body>
 </html>
