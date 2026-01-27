@@ -4,64 +4,55 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 const player = {
-    x: 100, y: 100, size: 30, speed: 5,
+    x: 200, y: 200, size: 30, speed: 5,
     hp: 3, maxHp: 3, lastShot: 0, cooldown: 1000, 
-    mode: 'vs'
+    mode: 'vs',
+    moving: { up: false, down: false, left: false, right: false }
 };
 
-// Admin Paneli Fonksiyonu
+// Mobil Hareket Fonksiyonu
+function move(dir, state) {
+    player.moving[dir] = state;
+}
+
 function toggleAdmin() {
     const panel = document.getElementById('adminPanel');
     panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
 }
 
-// Mod Değişince HP Otomatik Güncellenir
 function setMode(mode) {
     player.mode = mode;
     document.getElementById('modeDisplay').innerText = mode.toUpperCase();
-    
-    if (mode === 'flag') { 
-        player.hp = 1; player.maxHp = 1; 
-    } else if (mode === 'vs') { 
-        player.hp = 3; player.maxHp = 3; player.cooldown = 1000; 
-    } else if (mode === 'zombie') { 
-        player.hp = 10; player.maxHp = 10; 
-    } else if (mode === 'maze') { 
-        player.hp = Infinity; 
-    }
-    
-    updateUI();
+    player.hp = (mode === 'flag') ? 1 : (mode === 'zombie' ? 10 : 3);
+    player.maxHp = player.hp;
+    if(mode === 'maze') player.hp = Infinity;
+    document.getElementById('hpDisplay').innerText = player.hp === Infinity ? "∞" : player.hp;
     toggleAdmin();
 }
 
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyP') toggleAdmin();
-    if (e.code === 'KeyB') console.log("Özel Güç B Kullanıldı!"); 
-    if (e.code === 'Space') shoot();
-});
+function useSpecialPower() { console.log("B Gücü!"); }
 
 function shoot() {
-    // Savaş modunda 1 saniye cooldown kuralı (kalıcı)
     if (Date.now() - player.lastShot < player.cooldown) return;
     player.lastShot = Date.now();
-    console.log("Ateşlendi! (4 Yön Aktif)");
+    console.log("Ateşlendi!");
 }
 
-function updateUI() {
-    document.getElementById('hpDisplay').innerText = player.hp === Infinity ? "Ölümsüz" : player.hp;
-}
+// Ana Döngü
+function update() {
+    if (player.moving.up) player.y -= player.speed;
+    if (player.moving.down) player.y += player.speed;
+    if (player.moving.left) player.x -= player.speed;
+    if (player.moving.right) player.x += player.speed;
 
-function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = player.mode === 'flag' ? '#00ccff' : '#ff3333';
     ctx.fillRect(player.x, player.y, player.size, player.size);
     
-    // Labirent değilse HP Barı göster
     if (player.mode !== 'maze') {
         ctx.fillStyle = '#444'; ctx.fillRect(player.x, player.y - 10, player.size, 5);
         ctx.fillStyle = '#00ff00'; ctx.fillRect(player.x, player.y - 10, (player.hp / player.maxHp) * player.size, 5);
     }
-    requestAnimationFrame(draw);
+    requestAnimationFrame(update);
 }
-
-draw();
+update();
