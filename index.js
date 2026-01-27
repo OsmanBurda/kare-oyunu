@@ -1,33 +1,27 @@
 // --- OSMAN'IN KALICI AYARLARI ---
-const can = 3; 
-const cooldownSuresi = 1000; // Savaş modunda 1 saniye
-const gucTusu = 'b'; // Sadece 'b' çalışır
-const atesYonSırayısı = 4; // 4 tarafa ateş kalıcı
-
+const can = 3; // VS'de 3 can kuralı
+const cooldown = 1000; // Savaş modunda 1 saniye
+const gucTusu = 'b'; // Sadece 'b' tuşu
 let sonAtes = 0;
-let aktifMod = "bayrak";
+let aktifMod = "bayrak"; //
 
-// Oyun Başlangıç Uyarısı
-alert("OSMAN SİSTEMİ YÜKLENDİ:\n- Admin, Labirent, Zombi Aktif\n- 4 Yöne Ateş & 1s Cooldown\n- 3 Can & B Gücü");
+// Başlangıç Paneli
+alert("OSMAN SİSTEMİ AKTİF!\n- 3 Can ve 1s Cooldown\n- 4 Yönlü Ateş\n- Bayrak, Zombi, Labirent Modları");
 
 window.addEventListener("keydown", (e) => {
     let tus = e.key.toLowerCase();
-
+    
     // Özel Güç
-    if (tus === gucTusu) {
-        console.log("Osman Admin Özel Gücü!");
-    }
+    if(tus === gucTusu) console.log("Özel Güç Aktif!");
 
-    // Ateş Etme Kuralları
-    if (tus === " " || tus === "f") {
-        if (aktifMod === "bayrak") return; // Bayrakta ateş yok
-
+    // Ateş Etme (4 Yönlü)
+    if(tus === " " || tus === "f") {
+        if(aktifMod === "bayrak") return; // Bayrakta ateş yok
+        
         let simdi = Date.now();
-        if (simdi - sonAtes >= cooldownSuresi) {
-            console.log("4 Yöne Ateşlendi! (1 HP Hasar)");
+        if(simdi - sonAtes >= cooldown) {
+            console.log("4 Yöne Ateş Edildi!");
             sonAtes = simdi;
         }
     }
 });
-
-console.log("Oyun dosyaları senkronize edildi.");
