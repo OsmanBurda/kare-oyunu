@@ -2,73 +2,19 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Osman Ultra Mod 2026</title>
+    <title>Osman Game 2026</title>
     <style>
-        body { margin: 0; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow: hidden; }
-        canvas { display: block; background: #111; }
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.9); padding: 15px; border: 2px solid gold; border-radius: 10px; }
-        .admin-title { color: gold; font-weight: bold; text-align: center; border-bottom: 1px solid gold; margin-bottom: 10px; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: gold; padding: 10px; border: 2px solid gold; z-index: 10; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div class="admin-title">OSMAN ADMIN PANELİ</div>
-        <div>CAN: <span id="lives">3</span> | PUAN: 0</div>
-        <div id="mod">AKTİF: Bayrak Kapmaca</div>
-        <hr>
-        <small>B: GÜÇ | 4-YÖN ATEŞ: AKTİF</small>
+        <b>OSMAN ADMIN PANEL</b><br>
+        CAN: 3 | MOD: Bayrak Kapmaca<br>
+        <small>Güç: B | 4-Yön Ateş Aktif</small>
     </div>
     <canvas id="gameCanvas"></canvas>
-
-<script>
-    // --- OSMAN'IN KALICI VE DEĞİŞMEZ AYARLARI ---
-    const OSMAN_SISTEM = {
-        can: 3, // VS Modu Can
-        cooldown: 1000, // Savaş Modu 1s Bekleme
-        ozelGucTusu: 'b', // Özel Güç Tuşu
-        atesYonleri: 4, // 4 Tarafa Ateş
-        puanSiniri: 3, // Bayrak Kapmaca Sınırı
-        ozellikler: ["Admin Panel", "Labirent", "Zombi", "Savaş", "Bayrak"] // Kalıcı Modlar
-    };
-
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    let sonAtes = 0;
-    let aktifMod = "bayrak"; //
-
-    // --- KONTROLLER VE KURALLAR ---
-    window.addEventListener("keydown", (e) => {
-        const tus = e.key.toLowerCase();
-
-        // 1. Özel Güç (Sadece 'b')
-        if (tus === OSMAN_SISTEM.ozelGucTusu) {
-            console.log("OSMAN: Admin Gücü Tetiklendi!");
-        }
-
-        // 2. Ateş Etme (4 Tarafa)
-        if (tus === " " || tus === "f") {
-            // Bayrak modunda ateş yasağı
-            if (aktifMod === "bayrak") return;
-
-            let simdi = Date.now();
-            if (simdi - sonAtes >= OSMAN_SISTEM.cooldown) {
-                console.log("4 Yöne Ateşlendi! (Kuzey, Güney, Doğu, Batı)");
-                sonAtes = simdi;
-            }
-        }
-    });
-
-    // --- BAŞLANGIÇ ---
-    window.onload = () => {
-        alert("SİSTEM KİLİTLENDİ, OSMAN!\n\n" +
-              "- Admin & Labirent & Zombi Aktif\n" +
-              "- 4 Tarafa Ateş Kalıcı\n" +
-              "- Bayrak Modu (2 Bayrak, 3 Puan)\n" +
-              "- Can: 3 | Bekleme: 1s"); //
-    };
-</script>
+    <script src="index.js"></script>
 </body>
 </html>
