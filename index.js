@@ -8,12 +8,8 @@ app.get('/', (req, res) => { res.sendFile(__dirname + '/index.html'); });
 let rooms = {}; 
 const mazeWalls = [{ x: 0, y: 300, w: 340, h: 10 }, { x: 60, y: 220, w: 340, h: 10 }, { x: 0, y: 140, w: 340, h: 10 }, { x: 60, y: 60, w: 340, h: 10 }, { x: 0, y: 0, w: 5, h: 400 }, { x: 395, y: 0, w: 5, h: 400 }];
 
-function getRoomList() {
-    return Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status}));
-}
-
 io.on('connection', (socket) => {
-    socket.emit('roomList', getRoomList());
+    socket.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
 
     socket.on('adminVerify', (pass) => {
         if(pass && pass.trim() === "123Osman123Burda") {
@@ -22,12 +18,12 @@ io.on('connection', (socket) => {
                 r.players[socket.id].isAdmin = true;
                 r.players[socket.id].hp = 999;
                 socket.emit('adminSuccess');
-            } else { socket.emit('err', 'Önce odaya gir!'); }
-        } else { socket.emit('err', 'Yanlış Şifre!'); }
+            }
+        }
     });
 
     socket.on('createRoom', (data) => {
-        const rName = data.roomName;
+        const rName = data.roomName || "Oda";
         if (rooms[rName]) return socket.emit('err', 'Oda var!');
         rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, wave: 1, spawned: 0, status: 'lobby', leader: socket.id };
         joinProcess(socket, rName, data.userName);
@@ -40,18 +36,27 @@ io.on('connection', (socket) => {
 
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
-        rooms[rName].players[socket.id] = { x: 200, y: 200, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: (rooms[rName].mode==='zombi'?10:3), active: false, lastDir: 'up', lastFire: 0, lastBlast: 0, isAdmin: false };
+        // Başlangıçta herkes merkezde görünür ama oyun başlayınca dağılırlar
+        rooms[rName].players[socket.id] = { x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: (rooms[rName].mode==='zombi'?10:3), active: false, lastDir: 'up', lastFire: 0, lastBlast: 0, isAdmin: false };
         socket.emit('joined', { isLeader: (rooms[rName].leader === socket.id) });
-        io.emit('roomList', getRoomList());
+        io.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
     }
 
     socket.on('startGameSignal', () => {
         let r = rooms[socket.roomName];
         if(r && r.leader === socket.id) {
             r.status = 'playing';
-            for(let id in r.players) { r.players[id].active = true; if(r.mode==='labirent'){r.players[id].x=180; r.players[id].y=360;} }
+            for(let id in r.players) { 
+                r.players[id].active = true; 
+                // Rastgele Doğma Mantığı (Savaş ve Zombi Modu için)
+                if(r.mode === 'labirent') {
+                    r.players[id].x = 180; r.players[id].y = 360;
+                } else {
+                    r.players[id].x = 20 + Math.random() * 350;
+                    r.players[id].y = 20 + Math.random() * 350;
+                }
+            }
             io.to(socket.roomName).emit('gameStarted');
-            io.emit('roomList', getRoomList());
         }
     });
 
@@ -92,7 +97,7 @@ io.on('connection', (socket) => {
         if(socket.roomName && rooms[socket.roomName]) {
             delete rooms[socket.roomName].players[socket.id];
             if (Object.keys(rooms[socket.roomName].players).length === 0) delete rooms[socket.roomName];
-            io.emit('roomList', getRoomList());
+            io.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
         }
     });
 });

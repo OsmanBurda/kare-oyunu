@@ -6,7 +6,7 @@
         * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
         input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; user-select: text; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
         .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
@@ -25,11 +25,10 @@
     <div id="howToPlayPanel" class="overlay" style="display:none; z-index:500;">
         <h2>NASIL OYNANIR?</h2>
         <div style="text-align:left; max-width:280px; background:#333; padding:15px; border-radius:10px;">
-            <p><b>🎮 Hareket:</b> W,A,S,D veya Ok Tuşları</p>
-            <p><b>🔫 Ateş:</b> Boşluk (Space)</p>
-            <p><b>💥 Özel Güç:</b> "B" Tuşu (Zombi Modu)</p>
-            <hr>
-            <p>Zombi: Hayatta kal! / Savaş: Rakipleri vur! / Labirent: Yeşile ilk sen ulaş!</p>
+            <p>🎮 <b>Hareket:</b> W,A,S,D / Oklar</p>
+            <p>🔫 <b>Ateş:</b> Space</p>
+            <p>💥 <b>Güç:</b> "B" Tuşu</p>
+            <p>🛠️ <b>Panel:</b> "P" Tuşu</p>
         </div>
         <button class="btn" style="margin-top:20px" onclick="document.getElementById('howToPlayPanel').style.display='none'">ANLADIM</button>
     </div>
@@ -41,22 +40,20 @@
         <input type="text" id="nameInput" placeholder="İsmin...">
         <button class="btn" onclick="createRoom()">ODA KUR</button>
         <button class="btn" style="background:#2196F3" onclick="document.getElementById('howToPlayPanel').style.display='flex'">NASIL OYNANIR?</button>
-        <div id="roomListContainer" style="margin-top:10px"></div>
-        <div style="margin-top:10px">
-            <input type="text" id="newRoomName" placeholder="Oda Adı">
-            <select id="modeSelect" style="padding:10px; width:240px; border-radius:8px;">
-                <option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option>
-            </select>
-        </div>
+        <div id="roomListContainer" style="margin-top:10px; width:100%"></div>
+        <input type="text" id="newRoomName" placeholder="Oda Adı">
+        <select id="modeSelect" style="padding:10px; width:240px; border-radius:8px;">
+            <option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option>
+        </select>
     </div>
 
     <div id="lobbyOverlay" class="overlay" style="display:none;">
         <h2 id="lobbyTitle">Lobi</h2>
         <button id="startBtn" class="btn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
-        <p>Hazırlanın...</p>
+        <p>Oyuncular bekleniyor...</p>
     </div>
 
-    <div id="adminBadge" style="display:none; color:lime; font-weight:bold;">[ YAPIMCI MODU AKTİF ]</div>
+    <div id="adminBadge" style="display:none; color:lime; font-weight:bold;">[ YAPIMCI MODU ]</div>
     <div id="status">Can: 3</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
@@ -76,21 +73,14 @@
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let isAdmin = false;
 
-        // Zoom ve Kaydırma Engelleme (Kalıcı)
         document.addEventListener('touchstart', (e) => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
-        document.addEventListener('gesturestart', (e) => e.preventDefault());
 
-        function checkAdmin() { 
-            const val = document.getElementById('adminPassInput').value.trim();
-            if(val) socket.emit('adminVerify', val); 
-            document.getElementById('adminAuthPanel').style.display='none'; 
-        }
-        
+        function checkAdmin() { socket.emit('adminVerify', document.getElementById('adminPassInput').value.trim()); document.getElementById('adminAuthPanel').style.display='none'; }
         socket.on('adminSuccess', () => { isAdmin = true; document.getElementById('adminBadge').style.display='block'; });
         
         socket.on('roomList', (rooms) => {
-            const container = document.getElementById('roomListContainer'); container.innerHTML = "<h4>Odalar</h4>";
-            rooms.forEach(r => { container.innerHTML += `<button class="btn" style="background:#333; margin-bottom:5px" onclick="joinRoom('${r.name}')">${r.name} (${r.count} Kişi)</button>`; });
+            const container = document.getElementById('roomListContainer'); container.innerHTML = "";
+            rooms.forEach(r => { container.innerHTML += `<button class="btn" style="background:#333; margin-bottom:5px" onclick="joinRoom('${r.name}')">${r.name} (${r.count})</button>`; });
         });
 
         function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('newRoomName').value || "Oda", userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
@@ -113,7 +103,7 @@
             if(['a','arrowleft'].includes(k)) socket.emit('move', 'left');
             if(['d','arrowright'].includes(k)) socket.emit('move', 'right');
             if(e.code === 'Space') socket.emit('fire');
-            if(k === 'b') useBlast(); // Sadece 'b' tuşu aktif
+            if(k === 'b') useBlast();
         });
 
         socket.on('state', (d) => {
