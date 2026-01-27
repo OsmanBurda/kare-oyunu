@@ -3,65 +3,88 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        /* Tüm sayfanın ve butonların yakınlaştırmasını/kaymasını engeller */
-        * { 
-            touch-action: none; 
-            -webkit-text-size-adjust: none; 
-            -webkit-touch-callout: none; 
-            user-select: none; 
-        }
-        
-        body { 
-            background: #1a1a1a; 
-            color: white; 
-            text-align: center; 
-            margin: 0; 
-            font-family: 'Segoe UI', sans-serif; 
-            overflow: hidden; 
-            position: fixed; /* Ekranın kaymasını engeller */
-            width: 100%; 
-            height: 100%; 
-        }
-
-        canvas { 
-            border: 4px solid #4CAF50; 
-            background: #eee; 
-            width: 300px; /* Mobilde daha iyi sığması için hafif küçültüldü */
-            height: 300px; 
-            display: block; 
-            margin: 5px auto; 
-            touch-action: none; 
-        }
-
-        /* Kontrol butonları için özel ayar: Tıklamada zoom yapmaz */
-        .ctrl-btn { 
-            padding: 20px; 
-            background: #444; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            border: none; 
-            color: white; 
-            touch-action: manipulation; /* Sadece tıklamaya izin verir, zoom'a değil */
-        }
+        * { touch-action: none; -webkit-text-size-adjust: none; -webkit-touch-callout: none; user-select: none; box-sizing: border-box; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: 'Segoe UI', sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 300px; height: 300px; display: block; margin: 5px auto; border-radius: 8px; touch-action: none; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
+        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
+        .room-card { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 240px; border-left: 5px solid #4CAF50; text-align: left; }
+        input, select { padding: 10px; width: 240px; border-radius: 8px; border: 1px solid #444; background: #222; color: white; margin: 5px; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); width: 220px; margin: auto; gap: 8px; }
+        .ctrl-btn { padding: 18px; background: #444; border-radius: 8px; font-weight: bold; border: none; color: white; touch-action: manipulation; }
     </style>
 </head>
 <body>
-    <script>
-        // Tarayıcının çift tıklama ile zoom yapmasını JS ile de engelliyoruz
-        document.addEventListener('touchstart', function (event) {
-            if (event.touches.length > 1) {
-                event.preventDefault();
-            }
-        }, { passive: false });
+    <div id="gameOverlay" class="overlay">
+        <h1 style="color:#4CAF50;">KARE OYUNLARI</h1>
+        <input type="text" id="nameInput" placeholder="İsminizi girin...">
+        <div style="background:#222; padding:15px; border-radius:12px; margin:10px;">
+            <label>Yeni Oda</label><br>
+            <input type="text" id="roomNameInput" placeholder="Oda Adı">
+            <select id="modeSelect" onchange="document.getElementById('tDiv').style.display=(this.value==='bayrak'?'block':'none')">
+                <option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option><option value="bayrak">Bayrak Kapmaca</option>
+            </select>
+            <div id="tDiv" style="display:none;"><select id="teamSelect"><option value="Kırmızı">Kırmızı</option><option value="Mavi">Mavi</option></select></div>
+            <button class="btn" onclick="createRoom()">KUR VE GİR</button>
+        </div>
+        <h3>Aktif Odalar</h3>
+        <div id="roomListContainer"></div>
+    </div>
 
+    <div id="lobby" class="overlay" style="display:none;">
+        <h2 id="lText">Lobi</h2>
+        <div id="playerList" style="background:#222; padding:15px; width:240px; border-radius:10px; text-align:left;"></div>
+        <button class="btn" id="sBtn" style="display:none; background:#ff9800; margin-top:20px;" onclick="socket.emit('startGameSignal')">BAŞLAT</button>
+    </div>
+
+    <div id="status" style="font-weight:bold; margin:5px; color:#4CAF50;">Skor: 0</div>
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    
+    <div class="controls">
+        <button class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</button>
+        <button class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</button>
+        <button class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</button>
+        <button class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</button>
+        <button class="ctrl-btn" style="background:red;" ontouchstart="socket.emit('fire')">ATEŞ</button>
+        <button class="ctrl-btn" style="background:purple;" ontouchstart="socket.emit('areaBlast')">B</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let lastTouchEnd = 0;
-        document.addEventListener('touchend', function (event) {
-            let now = (new Date()).getTime();
-            if (now - lastTouchEnd <= 300) {
-                event.preventDefault();
+        document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+        document.addEventListener('touchend', e => { let now = Date.now(); if (now - lastTouchEnd <= 300) e.preventDefault(); lastTouchEnd = now; }, false);
+
+        function createRoom() {
+            socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value, team: document.getElementById('teamSelect').value });
+        }
+
+        socket.on('roomList', (rooms) => {
+            const container = document.getElementById('roomListContainer');
+            container.innerHTML = rooms.length === 0 ? "<p>Oda yok.</p>" : "";
+            rooms.forEach(r => {
+                container.innerHTML += `<div class="room-card"><b>${r.name}</b> (${r.mode})<br><button class="btn" style="width:100%; padding:5px;" onclick="socket.emit('joinExistingRoom', {roomName:'${r.name}', userName:document.getElementById('nameInput').value, team:document.getElementById('teamSelect').value})">GİRİŞ</button></div>`;
+            });
+        });
+
+        socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
+        socket.on('updatePlayerList', (players) => { document.getElementById('playerList').innerHTML = "<b>Oyuncular:</b><br>" + players.map(p => `• ${p.name} ${p.team ? '('+p.team+')' : ''}`).join('<br>'); });
+        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
+
+        socket.on('state', d => {
+            ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
+            if(d.mode === 'bayrak') {
+                ctx.fillStyle = "rgba(255,0,0,0.2)"; ctx.fillRect(0,0,60,60); ctx.fillStyle = "rgba(0,0,255,0.2)"; ctx.fillRect(340,340,60,60);
+                ctx.fillStyle = "red"; ctx.fillRect(d.redFlag.x, d.redFlag.y, 20, 20); ctx.fillStyle = "blue"; ctx.fillRect(d.blueFlag.x, d.blueFlag.y, 20, 20);
+                document.getElementById('status').innerText = `K: ${d.scores.Kırmızı} | M: ${d.scores.Mavi}`;
             }
-            lastTouchEnd = now;
-        }, false);
+            (d.bullets||[]).forEach(b=>{ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,8,8);});
+            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
+            for(let id in d.players){ let p = d.players[id]; if(p.hp > 0) { ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); if(id===socket.id && d.mode!=='bayrak') document.getElementById('status').innerText="Can: "+p.hp; } }
+        });
+        socket.on('winner', m => { alert(m); location.reload(); });
+        socket.on('err', m => alert(m));
     </script>
 </body>
 </html>

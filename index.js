@@ -2,15 +2,17 @@ const express = require('express');
 const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http);
+const path = require('path');
 
-app.get('/', (req, res) => { res.sendFile(__dirname + '/index.html'); });
+// Dosya yolunu Render/Heroku gibi platformlar için sağlama alıyoruz
+app.use(express.static(__dirname));
+app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 let rooms = {}; 
 const mazeWalls = [{ x: 0, y: 300, w: 340, h: 10 }, { x: 60, y: 220, w: 340, h: 10 }, { x: 0, y: 140, w: 340, h: 10 }, { x: 60, y: 60, w: 340, h: 10 }];
 const baseWalls = [{x: 0, y: 80, w: 100, h: 10}, {x: 300, y: 310, w: 100, h: 10}];
 
 io.on('connection', (socket) => {
-    // Oda listesini her yeni bağlantıda gönder
     socket.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length})));
 
     socket.on('createRoom', (data) => {
@@ -95,6 +97,16 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('areaBlast', () => {
+        let r = rooms[socket.roomName]; if(!r || r.mode !== 'zombi') return;
+        let p = r.players[socket.id];
+        if(p && p.hp > 0 && Date.now() - p.lastBlast > 15000) {
+            p.lastBlast = Date.now();
+            r.zombies = r.zombies.filter(z => Math.hypot(p.x - z.x, p.y - z.y) > 80);
+            io.to(socket.roomName).emit('blastEffect', { x: p.x + 12, y: p.y + 12 });
+        }
+    });
+
     socket.on('disconnect', () => {
         if(socket.roomName && rooms[socket.roomName]) {
             let r = rooms[socket.roomName];
@@ -111,8 +123,17 @@ io.on('connection', (socket) => {
     setInterval(() => {
         for(let name in rooms) {
             let r = rooms[name]; if(r.status !== 'playing') continue;
-            if(r.redFlag.carrier) { let c = r.players[r.redFlag.carrier]; r.redFlag.x = c.x; r.redFlag.y = c.y; }
-            if(r.blueFlag.carrier) { let c = r.players[r.blueFlag.carrier]; r.blueFlag.x = c.x; r.blueFlag.y = c.y; }
+            if(r.redFlag.carrier) { let c = r.players[r.redFlag.carrier]; if(c) { r.redFlag.x = c.x; r.redFlag.y = c.y; } }
+            if(r.blueFlag.carrier) { let c = r.players[r.blueFlag.carrier]; if(c) { r.blueFlag.x = c.x; r.blueFlag.y = c.y; } }
+            
+            if(r.mode === 'zombi') {
+                if(r.zombies.length < 5) r.zombies.push({x: Math.random()*380, y: Math.random()*380, hp: 1});
+                r.zombies.forEach(z => {
+                    let targets = Object.values(r.players).filter(p => p.hp > 0);
+                    if(targets.length > 0) { z.x += z.x < targets[0].x ? 1 : -1; z.y += z.y < targets[0].y ? 1 : -1; }
+                });
+            }
+
             r.bullets.forEach((b, bi) => {
                 b.x += (b.dir==='left'?-15:(b.dir==='right'?15:0)); b.y += (b.dir==='up'?-15:(b.dir==='down'?15:0));
                 for(let id in r.players) {
@@ -126,7 +147,7 @@ io.on('connection', (socket) => {
                     }
                 }
             });
-            io.to(name).emit('state', { players: r.players, redFlag: r.redFlag, blueFlag: r.blueFlag, scores: r.scores, mode: r.mode, bullets: r.bullets, walls: (r.mode==='labirent'?mazeWalls:(r.mode==='bayrak'?baseWalls:[])) });
+            io.to(name).emit('state', { players: r.players, redFlag: r.redFlag, blueFlag: r.blueFlag, scores: r.scores, mode: r.mode, bullets: r.bullets, zombies: r.zombies, walls: (r.mode==='labirent'?mazeWalls:(r.mode==='bayrak'?baseWalls:[])) });
         }
     }, 50);
 });
