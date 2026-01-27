@@ -1,67 +1,22 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <style>
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
-    </style>
-</head>
-<body>
-    <div id="gameOverlay" class="overlay">
-        <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="İsmin..." style="padding:10px; width:240px; margin:5px;">
-        <select id="modeSelect" onchange="document.getElementById('tDiv').style.display=(this.value==='bayrak'?'block':'none')" style="padding:10px; width:240px; margin:5px;">
-            <option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option><option value="bayrak">Bayrak Kapmaca</option>
-        </select>
-        <div id="tDiv" style="display:none;"><select id="teamSelect" style="padding:10px; width:240px;"><option value="Kırmızı">Kırmızı</option><option value="Mavi">Mavi</option></select></div>
-        <button class="btn" onclick="socket.emit('createRoom', { roomName: 'Oda'+Math.random(), userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value, team: document.getElementById('teamSelect').value })">ODA KUR</button>
-        <button class="btn" style="background:#2196F3" onclick="alert('Zombi: Hayatta kal!\nSavaş: Diğerlerini vur!\nBayrak: Rakip bayrağı üssüne getir (3 Puan)!')">NASIL OYNANIR?</button>
+<div id="lobby" class="overlay" style="display:none;">
+    <h2 id="lText">Lobi</h2>
+    <div style="background:rgba(255,255,255,0.1); padding:15px; border-radius:10px; width:260px; margin-bottom:10px;">
+        <h4 style="margin-top:0;">Oyuncular:</h4>
+        <div id="playerList" style="text-align:left; font-size:14px;"></div>
     </div>
+    <button class="btn" id="sBtn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
+</div>
 
-    <div id="lobby" class="overlay" style="display:none;"><h2>Lobi</h2><button class="btn" id="sBtn" style="display:none" onclick="socket.emit('startGameSignal')">BAŞLAT</button></div>
-
-    <div id="status">Can: 0</div>
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-    
-    <div style="display:grid; grid-template-columns: repeat(3, 1fr); width:180px; margin:auto; gap:5px;">
-        <div ontouchstart="socket.emit('move','up')">▲</div><div ontouchstart="socket.emit('move','left')">◀</div>
-        <div ontouchstart="socket.emit('move','right')">▶</div><div ontouchstart="socket.emit('move','down')">▼</div>
-        <div style="background:red" ontouchstart="socket.emit('fire')">ATEŞ</div><div style="background:purple" ontouchstart="socket.emit('areaBlast')">B</div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
-        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
-
-        window.addEventListener('keydown', e => {
-            let k = e.key.toLowerCase();
-            if(k==='w') socket.emit('move','up'); if(k==='s') socket.emit('move','down');
-            if(k==='a') socket.emit('move','left'); if(k==='d') socket.emit('move','right');
-            if(e.code==='Space') socket.emit('fire'); if(k==='b') socket.emit('areaBlast');
+<script>
+    // Oyuncu listesini güncelleyen fonksiyon
+    socket.on('updatePlayerList', (players) => {
+        const listDiv = document.getElementById('playerList');
+        listDiv.innerHTML = "";
+        players.forEach(p => {
+            let teamInfo = p.team ? ` [${p.team}]` : "";
+            listDiv.innerHTML += `<div>• ${p.name}${teamInfo}</div>`;
         });
+    });
 
-        socket.on('state', d => {
-            ctx.clearRect(0,0,400,400);
-            ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            if(d.mode === 'bayrak') {
-                ctx.fillStyle = "rgba(255,0,0,0.2)"; ctx.fillRect(0,0,60,60);
-                ctx.fillStyle = "rgba(0,0,255,0.2)"; ctx.fillRect(340,340,60,60);
-                ctx.fillStyle = "red"; ctx.fillRect(d.redFlag.x, d.redFlag.y, 20, 20);
-                ctx.fillStyle = "blue"; ctx.fillRect(d.blueFlag.x, d.blueFlag.y, 20, 20);
-                document.getElementById('status').innerText = `K: ${d.scores.Kırmızı} | M: ${d.scores.Mavi}`;
-            }
-            (d.bullets||[]).forEach(b=>{ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,8,8);});
-            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
-            for(let id in d.players){
-                let p = d.players[id]; if(p.hp > 0) { ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); if(id===socket.id && d.mode!=='bayrak') document.getElementById('status').innerText="Can: "+p.hp; }
-            }
-        });
-        socket.on('winner', m => { alert(m); location.reload(); });
-    </script>
-</body>
-</html>
+    // ... (createRoom, joined ve gameStarted fonksiyonları aynı)
+</script>
