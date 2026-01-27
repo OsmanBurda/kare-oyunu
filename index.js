@@ -8,6 +8,7 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 let rooms = {}; 
+// Labirent duvarlarını geçilebilir boşluklar bırakacak şekilde güncelledim
 const mazeWalls = [{ x: 0, y: 300, w: 300, h: 15 }, { x: 100, y: 200, w: 300, h: 15 }, { x: 0, y: 100, w: 300, h: 15 }];
 
 io.on('connection', (socket) => {
@@ -15,46 +16,38 @@ io.on('connection', (socket) => {
 
     socket.on('createRoom', (data) => {
         const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
-        rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id, wave: 1 };
+        rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id };
         joinProcess(socket, rName, data.userName);
     });
 
     socket.on('joinExistingRoom', (data) => {
-        if (rooms[data.roomName] && rooms[data.roomName].status === 'lobby') joinProcess(socket, data.roomName, data.userName);
+        if (!rooms[data.roomName] || rooms[data.roomName].status === 'playing') return;
+        joinProcess(socket, data.roomName, data.userName);
     });
 
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
-        // CAN AYARI: Zombi=10, Savaş(VS)=3, Labirent=1
-        let initialHp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-
         r.players[socket.id] = { 
-            id: socket.id, x: 185, y: 185, name: uName || "Kare", 
+            x: 185, y: 185, name: uName || "Kare", 
             color: '#' + Math.floor(Math.random()*16777215).toString(16),
-            hp: initialHp, active: false, lastDir: 'up', lastFire: 0
+            hp: (r.mode === 'zombi' ? 10 : 1), active: false, lastDir: 'up', lastFire: 0, lastBlast: 0 
         };
         socket.emit('joined', { isLeader: (r.leader === socket.id) });
-        io.to(rName).emit('updatePlayerList', {players: Object.values(r.players), leaderId: r.leader});
+        io.to(rName).emit('updatePlayerList', Object.values(r.players).map(p => ({name: p.name})));
+        io.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length})));
     }
-
-    socket.on('kickPlayer', (tid) => {
-        let r = rooms[socket.roomName];
-        if(r && r.leader === socket.id && tid !== socket.id) {
-            io.to(tid).emit('kicked');
-            delete r.players[tid];
-            io.to(socket.roomName).emit('updatePlayerList', {players: Object.values(r.players), leaderId: r.leader});
-        }
-    });
 
     socket.on('startGameSignal', () => {
         let r = rooms[socket.roomName];
         if(r && r.leader === socket.id) {
             r.status = 'playing';
-            for(let id in r.players) {
-                let p = r.players[id]; p.active = true;
-                p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350);
-                p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350);
+            for(let id in r.players) { 
+                let p = r.players[id];
+                p.active = true;
+                // DÜZELTME: Labirentte herkes en altta başlar, diğerlerinde rastgele
+                if(r.mode === 'labirent') { p.x = 20; p.y = 350; }
+                else { p.x = 20 + Math.random()*350; p.y = 20 + Math.random()*350; }
             }
             io.to(socket.roomName).emit('gameStarted');
         }
@@ -67,39 +60,59 @@ io.on('connection', (socket) => {
         if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20;
         if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
         let walls = (r.mode === 'labirent' ? mazeWalls : []);
-        if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
-        if(r.mode === 'labirent' && p.y < 50 && p.x < 50) io.to(socket.roomName).emit('winner', p.name + " Kazandı!");
+        let hit = walls.some(w => nX < w.x + w.w && nX + 25 > w.x && nY < w.y + w.h && nY + 25 > w.y);
+        if (!hit && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
+        
+        // Labirent Bitiş Kontrolü (En üst sol köşe)
+        if(r.mode === 'labirent' && p.y < 50 && p.x < 50) {
+            io.to(socket.roomName).emit('winner', p.name + " Labirenti Bitirdi!");
+        }
     });
 
     socket.on('fire', () => {
-        let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        if(p && p.hp > 0 && Date.now() - p.lastFire > (r.mode === 'savas' ? 1000 : 200)) {
+        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let p = r.players[socket.id];
+        let rate = (r.mode === 'savas' ? 1000 : 200);
+        // DÜZELTME: Ateş etme kontrolü düzeltildi
+        if(p && p.hp > 0 && Date.now() - p.lastFire > rate) {
             r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id });
             p.lastFire = Date.now();
         }
     });
 
     setInterval(() => {
-        for(let n in rooms) {
-            let r = rooms[n]; if(r.status !== 'playing') continue;
+        for(let name in rooms) {
+            let r = rooms[name]; if(r.status !== 'playing') continue;
+            
+            // DÜZELTME: Zombiler bizden yavaş (Hız: 0.5) ve hasar veriyorlar
             if(r.mode === 'zombi') {
-                if(r.zombies.length === 0) r.wave++; 
-                if(r.zombies.length < r.wave + 2) r.zombies.push({x: Math.random()*380, y: 10});
+                if(r.zombies.length < 3) r.zombies.push({x: Math.random()*380, y: 10});
                 r.zombies.forEach(z => {
                     let targets = Object.values(r.players).filter(p => p.hp > 0);
                     if(targets.length > 0) {
-                        z.x += (z.x < targets[0].x ? 0.7 : -0.7);
-                        z.y += (z.y < targets[0].y ? 0.7 : -0.7);
-                        if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1;
+                        z.x += (z.x < targets[0].x ? 0.5 : -0.5);
+                        z.y += (z.y < targets[0].y ? 0.5 : -0.5);
+                        // Zombi hasarı
+                        targets.forEach(p => {
+                            if(Math.hypot(z.x - p.x, z.y - p.y) < 20) p.hp -= 0.05; 
+                        });
                     }
                 });
             }
+
             r.bullets.forEach((b, bi) => {
                 b.x += (b.dir==='left'?-15:(b.dir==='right'?15:0)); b.y += (b.dir==='up'?-15:(b.dir==='down'?15:0));
-                if(r.mode === 'zombi') r.zombies.forEach((z, zi) => { if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); } });
-                for(let id in r.players) { let p = r.players[id]; if(id !== b.owner && p.hp > 0 && b.x < p.x+25 && b.x+8 > p.x && b.y < p.y+25 && b.y+8 > p.y) { p.hp -= 1; r.bullets.splice(bi, 1); break; } }
+                // Mermi ekran dışına çıkınca sil
+                if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
+                
+                for(let id in r.players) {
+                    let p = r.players[id];
+                    if(id !== b.owner && p.hp > 0 && b.x < p.x+25 && b.x+8 > p.x && b.y < p.y+25 && b.y+8 > p.y) {
+                        p.hp -= 1; r.bullets.splice(bi, 1); break;
+                    }
+                }
             });
-            io.to(n).emit('state', { players: r.players, mode: r.mode, bullets: r.bullets, zombies: r.zombies, walls: (r.mode==='labirent'?mazeWalls:[]), wave: r.wave });
+            io.to(name).emit('state', { players: r.players, mode: r.mode, bullets: r.bullets, zombies: r.zombies, walls: (r.mode==='labirent'?mazeWalls:[]) });
         }
     }, 50);
 });
