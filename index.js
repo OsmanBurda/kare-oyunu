@@ -23,7 +23,7 @@ io.on('connection', (socket) => {
                 r.players[socket.id].isAdmin = true;
                 r.players[socket.id].hp = 999;
                 socket.emit('adminSuccess');
-            }
+            } else { socket.emit('err', 'Hata: Önce odaya gir!'); }
         } else { socket.emit('err', 'Hatalı Şifre!'); }
     });
 
@@ -105,9 +105,7 @@ setInterval(() => {
             let maxZ = 3 + (r.wave * 2);
             if(r.zombies.length < maxZ && r.spawned < maxZ) {
                 let side = Math.floor(Math.random() * 4);
-                let pos = {x:0, y:0};
-                if(side===0){pos={x:Math.random()*400, y:-40}} else if(side===1){pos={x:Math.random()*400, y:440}}
-                else if(side===2){pos={x:-40, y:Math.random()*400}} else {pos={x:440, y:Math.random()*400}}
+                let pos = (side===0) ? {x:Math.random()*400, y:-40} : (side===1) ? {x:Math.random()*400, y:440} : (side===2) ? {x:-40, y:Math.random()*400} : {x:440, y:Math.random()*400};
                 r.zombies.push({ x: pos.x, y: pos.y, hp: 1 + Math.floor(r.wave/3) });
                 r.spawned++;
             }
@@ -120,19 +118,17 @@ setInterval(() => {
                     if(d < minDist) { minDist = d; target = p; }
                 }
                 if(target) {
-                    if(z.x < target.x) z.x += 1.2; else z.x -= 1.2;
-                    if(z.y < target.y) z.y += 1.2; else z.y -= 1.2;
+                    z.x += (z.x < target.x) ? 1.2 : -1.2;
+                    z.y += (z.y < target.y) ? 1.2 : -1.2;
                     if(minDist < 20 && Math.random() > 0.97 && !target.isAdmin) target.hp -= 1;
                 }
             });
         }
         r.bullets.forEach((b, bi) => {
-            if (b.dir === 'up') b.y -= 15; else if (b.dir === 'down') b.y += 15;
-            else if (b.dir === 'left') b.x -= 15; else if (b.dir === 'right') b.x += 15;
+            if (b.dir === 'up') b.y -= 15; else if (b.dir === 'down') b.y += 15; else if (b.dir === 'left') b.x -= 15; else b.x += 15;
             r.zombies.forEach((z, zi) => {
                 if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) {
-                    z.hp -= 1; r.bullets.splice(bi, 1);
-                    if(z.hp <= 0) r.zombies.splice(zi, 1);
+                    z.hp -= 1; r.bullets.splice(bi, 1); if(z.hp <= 0) r.zombies.splice(zi, 1);
                 }
             });
             if(r.mode === 'savas') {

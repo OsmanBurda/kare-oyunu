@@ -6,7 +6,7 @@
         * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
         input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; user-select: text; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
         .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
@@ -40,7 +40,7 @@
     <div id="lobbyOverlay" class="overlay" style="display:none;">
         <h2 id="lobbyTitle">Lobi</h2>
         <button id="startBtn" class="btn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
-        <p>Liderin başlatması bekleniyor...</p>
+        <p>Lider bekleniyor...</p>
     </div>
 
     <div id="adminBadge" style="display:none; color:lime; font-weight:bold;">[ YAPIMCI MODU ]</div>
@@ -63,8 +63,14 @@
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let isAdmin = false;
 
-        function checkAdmin() { socket.emit('adminVerify', document.getElementById('adminPassInput').value); document.getElementById('adminAuthPanel').style.display='none'; }
-        socket.on('adminSuccess', () => { isAdmin = true; document.getElementById('adminBadge').style.display='block'; alert("Yapımcı Yetkisi Verildi!"); });
+        function checkAdmin() { 
+            const val = document.getElementById('adminPassInput').value.trim();
+            if(val) socket.emit('adminVerify', val); 
+            document.getElementById('adminAuthPanel').style.display='none'; 
+            document.getElementById('adminPassInput').value = "";
+        }
+        
+        socket.on('adminSuccess', () => { isAdmin = true; document.getElementById('adminBadge').style.display='block'; alert("Sistem: Yapımcı modu aktif!"); });
         
         socket.on('roomList', (rooms) => {
             const container = document.getElementById('roomListContainer'); container.innerHTML = "";
@@ -85,7 +91,8 @@
 
         window.addEventListener('keydown', (e) => {
             let k = e.key.toLowerCase();
-            if(k === 'p') document.getElementById('adminAuthPanel').style.display='flex';
+            if(k === 'p') { document.getElementById('adminAuthPanel').style.display='flex'; document.getElementById('adminPassInput').focus(); }
+            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
             if(['w','arrowup'].includes(k)) socket.emit('move', 'up');
             if(['s','arrowdown'].includes(k)) socket.emit('move', 'down');
             if(['a','arrowleft'].includes(k)) socket.emit('move', 'left');
@@ -104,7 +111,7 @@
             for(let id in d.players){
                 let p = d.players[id]; if(!p.active || p.hp <= 0) continue;
                 ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25);
-                ctx.fillStyle="black"; ctx.fillText(p.name+(p.isAdmin?" [Y]":""), p.x, p.y-5);
+                ctx.fillStyle="black"; ctx.font = "12px Arial"; ctx.fillText(p.name+(p.isAdmin?" [Y]":""), p.x, p.y-5);
                 if(id===socket.id) document.getElementById('status').innerText = "Can: "+p.hp;
             }
         });
