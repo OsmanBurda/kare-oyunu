@@ -7,8 +7,7 @@
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
         .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
-        input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; font-size: 16px; user-select: text; }
-        .room-item { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 260px; display: flex; justify-content: space-between; align-items: center; }
+        input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; user-select: text; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; }
         .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
         .move-btn { width: 60px; height: 60px; background: #444; color: white; border-radius: 12px; border: none; font-size: 24px; }
@@ -20,8 +19,7 @@
     <div id="gameOverlay" class="overlay">
         <h2>KARE OYUNLARI</h2>
         <input type="text" id="nameInput" placeholder="Karakter Adın">
-        <hr style="width: 240px; border: 0.5px solid #444">
-        <h4>Oda Oluştur</h4>
+        <h4>Oda Kur</h4>
         <input type="text" id="newRoomName" placeholder="Oda Adı">
         <select id="modeSelect" style="padding: 10px; width: 240px; border-radius: 8px;">
             <option value="zombi">Zombi Modu</option>
@@ -34,13 +32,13 @@
     </div>
 
     <div id="lobbyOverlay" class="overlay" style="display:none;">
-        <h2 id="lobbyTitle">Oda: -</h2>
-        <p id="lobbyStatus">Liderin başlatması bekleniyor...</p>
+        <h2 id="lobbyTitle">Lobi</h2>
+        <p>Lider bekleniyor...</p>
         <button id="startBtn" class="btn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
     </div>
 
+    <div id="adminBadge" style="display:none; color:lime; font-weight:bold;">YAPIMCI MODU AKTİF</div>
     <div id="status">Can: 3</div>
-    <div id="waveInfo">MOD: BEKLE</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
     <div class="controls-grid">
@@ -57,31 +55,20 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0;
+        let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let isAdmin = false;
 
         socket.on('roomList', (rooms) => {
             const container = document.getElementById('roomListContainer');
             container.innerHTML = "";
             rooms.forEach(r => {
-                const div = document.createElement('div'); div.className = 'room-item';
-                div.innerHTML = `<span><b>${r.name}</b> [${r.status}]</span>
-                <button class="btn" style="width:70px; padding:5px" onclick="joinRoom('${r.name}')" ${r.status==='playing'?'disabled':''}>GİR</button>`;
+                const div = document.createElement('div');
+                div.innerHTML = `<span><b>${r.name}</b></span> <button class="btn" style="width:70px" onclick="joinRoom('${r.name}')">GİR</button>`;
                 container.appendChild(div);
             });
         });
 
-        function createRoom() {
-            const rName = document.getElementById('newRoomName').value;
-            const uName = document.getElementById('nameInput').value;
-            const mode = document.getElementById('modeSelect').value;
-            if(!rName) return alert("Oda adı yaz!");
-            socket.emit('createRoom', { roomName: rName, userName: uName, mode: mode });
-        }
-
-        function joinRoom(rName) {
-            const uName = document.getElementById('nameInput').value;
-            socket.emit('joinExistingRoom', { roomName: rName, userName: uName });
-        }
+        function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('newRoomName').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
+        function joinRoom(rName) { socket.emit('joinExistingRoom', { roomName: rName, userName: document.getElementById('nameInput').value }); }
 
         socket.on('joined', (data) => {
             document.getElementById('gameOverlay').style.display = 'none';
@@ -89,55 +76,46 @@
             if(data.isLeader) document.getElementById('startBtn').style.display = 'block';
         });
 
-        socket.on('gameStarted', () => {
-            document.getElementById('lobbyOverlay').style.display = 'none';
-        });
+        socket.on('gameStarted', () => { document.getElementById('lobbyOverlay').style.display = 'none'; });
+        socket.on('adminSuccess', () => { isAdmin = true; document.getElementById('adminBadge').style.display = 'block'; });
 
         function useBlast() {
             if(activeMode !== 'zombi') return;
-            if (Date.now() - lastBlast > 15000) {
-                socket.emit('areaBlast'); lastBlast = Date.now(); startCooldown();
+            let cd = isAdmin ? 1000 : 15000;
+            if (Date.now() - lastBlast > cd) {
+                socket.emit('areaBlast'); lastBlast = Date.now();
+                if(!isAdmin) startCooldown();
             }
         }
 
         function startCooldown() {
             let btn = document.getElementById('blastBtn'); let sn = 15; btn.disabled = true;
-            let timer = setInterval(() => {
-                sn--; btn.innerText = "BEKLE: " + sn;
-                if(sn <= 0) { clearInterval(timer); btn.disabled = false; btn.innerText = "GÜÇ (B)"; }
-            }, 1000);
+            let timer = setInterval(() => { sn--; btn.innerText = "BEKLE: " + sn; if(sn <= 0) { clearInterval(timer); btn.disabled = false; btn.innerText = "GÜÇ (B)"; } }, 1000);
         }
 
         window.addEventListener('keydown', (e) => {
-            const key = e.key.toLowerCase();
+            if (e.key.toLowerCase() === 'p') { const p = prompt("Şifre?"); socket.emit('adminVerify', p); }
             if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
-            if (key === 'w' || e.code === 'ArrowUp') socket.emit('move', 'up');
-            if (key === 's' || e.code === 'ArrowDown') socket.emit('move', 'down');
-            if (key === 'a' || e.code === 'ArrowLeft') socket.emit('move', 'left');
-            if (key === 'd' || e.code === 'ArrowRight') socket.emit('move', 'right');
+            if (['w','arrowup'].includes(e.key.toLowerCase())) socket.emit('move', 'up');
+            if (['s','arrowdown'].includes(e.key.toLowerCase())) socket.emit('move', 'down');
+            if (['a','arrowleft'].includes(e.key.toLowerCase())) socket.emit('move', 'left');
+            if (['d','arrowright'].includes(e.key.toLowerCase())) socket.emit('move', 'right');
             if (e.code === 'Space') socket.emit('fire');
-            if (key === 'b') useBlast();
+            if (e.key.toLowerCase() === 'b') useBlast();
         }, { passive: false });
 
         socket.on('blastEffect', (pos) => { blastEffectPos = pos; blastTimer = 10; });
         socket.on('state', (d) => {
-            activeMode = d.mode;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('waveInfo').innerText = d.mode === 'zombi' ? "DALGA: " + d.wave : d.mode.toUpperCase();
-            document.getElementById('fireBtn').style.opacity = d.mode === 'labirent' ? "0.3" : "1";
-            document.getElementById('blastBtn').style.opacity = d.mode === 'zombi' ? "1" : "0.3";
+            activeMode = d.mode; ctx.clearRect(0, 0, canvas.width, canvas.height);
             if(d.mode === 'labirent') { ctx.fillStyle = "#4CAF50"; ctx.fillRect(0, 0, canvas.width, 20); }
             ctx.fillStyle = "#333"; (d.walls || []).forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
-            if(blastEffectPos && blastTimer > 0) {
-                ctx.beginPath(); ctx.arc(blastEffectPos.x, blastEffectPos.y, 80, 0, Math.PI*2);
-                ctx.strokeStyle = "purple"; ctx.lineWidth = 6; ctx.stroke(); blastTimer--;
-            }
+            if(blastEffectPos && blastTimer > 0) { ctx.beginPath(); ctx.arc(blastEffectPos.x, blastEffectPos.y, 80, 0, Math.PI*2); ctx.strokeStyle = "purple"; ctx.lineWidth = 6; ctx.stroke(); blastTimer--; }
             (d.zombies || []).forEach(z => { ctx.fillStyle = "green"; ctx.fillRect(z.x, z.y, 25, 25); });
             (d.bullets || []).forEach(b => { ctx.fillStyle = "yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             for (let id in d.players) {
                 let p = d.players[id]; if(!p.active || p.hp <= 0) continue;
                 ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                ctx.fillStyle = "black"; ctx.font = "12px Arial"; ctx.fillText(p.name, p.x, p.y - 5);
+                ctx.fillStyle = "black"; ctx.font = "12px Arial"; ctx.fillText(p.name + (p.isAdmin?" [Y]":""), p.x, p.y - 5);
                 if(id === socket.id) document.getElementById('status').innerText = "Can: " + p.hp;
             }
         });
