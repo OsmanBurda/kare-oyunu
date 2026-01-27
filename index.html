@@ -4,24 +4,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow-y: auto; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; }
-        .move-btn { width: 65px; height: 65px; background: #444; color: white; border: none; border-radius: 12px; font-size: 24px; }
-        .fire-btn { width: 110px; height: 60px; background: #f44336; color: white; border-radius: 12px; border: none; font-weight: bold; }
-        .blast-btn { width: 110px; height: 60px; background: #9c27b0; color: white; border-radius: 12px; border: none; font-weight: bold; margin-left: 10px; }
-        .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 10px auto; }
+        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
+        input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; font-size: 16px; user-select: text; }
+        .room-item { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 260px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #555; }
+        .btn { padding: 10px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; }
+        .join-btn { background: #2196F3; padding: 5px 10px; border-radius: 5px; border: none; color: white; cursor: pointer; }
+        .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
+        .move-btn { width: 60px; height: 60px; background: #444; color: white; border-radius: 12px; border: none; font-size: 24px; }
+        .fire-btn { width: 100px; height: 55px; background: #f44336; color: white; border-radius: 12px; border: none; font-weight: bold; }
+        .blast-btn { width: 100px; height: 55px; background: #9c27b0; color: white; border-radius: 12px; border: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="gameOverlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; justify-content:center; align-items:center;">
-        <button class="btn" onclick="startGame('labirent')">LABİRENT MODU</button>
-        <button class="btn" onclick="startGame('savas')" style="background:#2196F3">SAVAŞ MODU (PvP)</button>
-        <button class="btn" onclick="startGame('zombi')" style="background:#f44336">ZOMBİ MODU</button>
+    <div id="gameOverlay" class="overlay">
+        <h2>KARE OYUNLARI</h2>
+        <input type="text" id="nameInput" placeholder="Karakter Adın">
+        <hr style="width: 240px; border: 0.5px solid #444">
+        
+        <h4>Oda Oluştur</h4>
+        <input type="text" id="newRoomName" placeholder="Oda Adı">
+        <select id="modeSelect" style="padding: 10px; width: 240px; border-radius: 8px;">
+            <option value="zombi">Zombi Modu</option>
+            <option value="savas">Savaş (PvP)</option>
+            <option value="labirent">Labirent</option>
+        </select>
+        <button class="btn" onclick="createRoom()">ODA KUR VE BAŞLAT</button>
+        
+        <h4>Mevcut Odalar</h4>
+        <div id="roomListContainer">Oda bulunamadı...</div>
     </div>
 
-    <div id="status" style="font-weight:bold; color:#ffeb3b;">Can: 3</div>
-    <div id="waveInfo" style="font-weight:bold; color:#ff5722;">MOD: BEKLE</div>
+    <div id="status">Can: 3</div>
+    <div id="waveInfo">MOD: BEKLE</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
     <div class="controls-grid">
@@ -30,8 +46,7 @@
         <button style="grid-area: right" class="move-btn" onclick="socket.emit('move', 'right')">▶</button>
         <button style="grid-area: down" class="move-btn" onclick="socket.emit('move', 'down')">▼</button>
     </div>
-
-    <div style="margin-bottom: 20px;">
+    <div style="margin-top: 10px;">
         <button id="fireBtn" class="fire-btn" onclick="socket.emit('fire')">ATEŞ</button>
         <button id="blastBtn" class="blast-btn" onclick="useBlast()">GÜÇ (B)</button>
     </div>
@@ -39,33 +54,48 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let activeMode = 'bekle';
+        let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0;
 
-        function startGame(mode) {
-            socket.emit('setMode', mode);
+        socket.on('roomList', (rooms) => {
+            const container = document.getElementById('roomListContainer');
+            container.innerHTML = rooms.length ? "" : "Oda bulunamadı...";
+            rooms.forEach(r => {
+                const div = document.createElement('div'); div.className = 'room-item';
+                div.innerHTML = `<span><b>${r.name}</b> (${r.mode}) - ${r.count} Kişi</span>
+                                 <button class="join-btn" onclick="joinRoom('${r.name}')">Katıl</button>`;
+                container.appendChild(div);
+            });
+        });
+
+        function createRoom() {
+            const rName = document.getElementById('newRoomName').value;
+            const uName = document.getElementById('nameInput').value;
+            const mode = document.getElementById('modeSelect').value;
+            if(!rName) return alert("Oda adı yaz!");
+            socket.emit('createRoom', { roomName: rName, userName: uName, mode: mode });
+            document.getElementById('gameOverlay').style.display = 'none';
+        }
+
+        function joinRoom(rName) {
+            const uName = document.getElementById('nameInput').value;
+            socket.emit('joinExistingRoom', { roomName: rName, userName: uName });
             document.getElementById('gameOverlay').style.display = 'none';
         }
 
         function useBlast() {
             if(activeMode !== 'zombi') return;
-            const now = Date.now();
-            if (now - lastBlast > 15000) {
-                socket.emit('areaBlast');
-                lastBlast = now;
-                startCooldown();
+            if (Date.now() - lastBlast > 15000) {
+                socket.emit('areaBlast'); lastBlast = Date.now(); startCooldown();
             }
         }
 
         function startCooldown() {
-            let btn = document.getElementById('blastBtn');
-            let sn = 15; btn.disabled = true;
+            let btn = document.getElementById('blastBtn'); let sn = 15; btn.disabled = true;
             let timer = setInterval(() => {
                 sn--; btn.innerText = "BEKLE: " + sn;
                 if(sn <= 0) { clearInterval(timer); btn.disabled = false; btn.innerText = "GÜÇ (B)"; }
             }, 1000);
         }
-
-        document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
         window.addEventListener('keydown', (e) => {
             const key = e.key.toLowerCase();
@@ -79,34 +109,29 @@
         }, { passive: false });
 
         socket.on('blastEffect', (pos) => { blastEffectPos = pos; blastTimer = 10; });
-
         socket.on('state', (d) => {
             activeMode = d.mode;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             document.getElementById('waveInfo').innerText = d.mode === 'zombi' ? "DALGA: " + d.wave : d.mode.toUpperCase();
-            
-            // Görsel buton kısıtlamaları
             document.getElementById('fireBtn').style.opacity = d.mode === 'labirent' ? "0.3" : "1";
             document.getElementById('blastBtn').style.opacity = d.mode === 'zombi' ? "1" : "0.3";
-
             if(d.mode === 'labirent') { ctx.fillStyle = "#4CAF50"; ctx.fillRect(0, 0, canvas.width, 20); }
             ctx.fillStyle = "#333"; (d.walls || []).forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
-
             if(blastEffectPos && blastTimer > 0) {
                 ctx.beginPath(); ctx.arc(blastEffectPos.x, blastEffectPos.y, 80, 0, Math.PI*2);
-                ctx.strokeStyle = "rgba(156, 39, 176, 0.6)"; ctx.lineWidth = 6; ctx.stroke(); blastTimer--;
+                ctx.strokeStyle = "purple"; ctx.lineWidth = 6; ctx.stroke(); blastTimer--;
             }
-
             (d.zombies || []).forEach(z => { ctx.fillStyle = "green"; ctx.fillRect(z.x, z.y, 25, 25); });
             (d.bullets || []).forEach(b => { ctx.fillStyle = "yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
-            
             for (let id in d.players) {
                 let p = d.players[id]; if(!p.active || p.hp <= 0) continue;
                 ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                ctx.fillStyle = "black"; ctx.font = "12px Arial"; ctx.fillText(p.name, p.x, p.y - 5);
                 if(id === socket.id) document.getElementById('status').innerText = "Can: " + p.hp;
             }
         });
         socket.on('winner', (m) => { alert(m); location.reload(); });
+        socket.on('err', (m) => alert(m));
     </script>
 </body>
 </html>
