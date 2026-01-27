@@ -47,7 +47,8 @@ io.on('connection', (socket) => {
     socket.on('areaBlast', () => {
         let p = players[socket.id];
         const now = Date.now();
-        if(p && p.hp > 0 && p.active && (now - p.lastBlast > 15000)) {
+        // Sadece zombi modunda çalışır
+        if(currentMode === 'zombi' && p && p.hp > 0 && p.active && (now - p.lastBlast > 15000)) {
             p.lastBlast = now;
             zombies = zombies.filter(z => Math.hypot(p.x - z.x, p.y - z.y) > 80);
             io.emit('blastEffect', { x: p.x + 12, y: p.y + 12 });
@@ -68,7 +69,8 @@ io.on('connection', (socket) => {
 
     socket.on('fire', () => {
         let p = players[socket.id];
-        if(p && p.hp > 0 && p.active && Date.now() - p.lastFire > 150) {
+        // Labirent modunda ateş edilemez
+        if(currentMode !== 'labirent' && p && p.hp > 0 && p.active && Date.now() - p.lastFire > 150) {
             bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id });
             p.lastFire = Date.now();
         }

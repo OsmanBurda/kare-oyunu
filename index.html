@@ -21,7 +21,7 @@
     </div>
 
     <div id="status" style="font-weight:bold; color:#ffeb3b;">Can: 3</div>
-    <div id="waveInfo" style="font-weight:bold; color:#ff5722;">DALGA: 1</div>
+    <div id="waveInfo" style="font-weight:bold; color:#ff5722;">MOD: BEKLE</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
     <div class="controls-grid">
@@ -32,14 +32,14 @@
     </div>
 
     <div style="margin-bottom: 20px;">
-        <button class="fire-btn" onclick="socket.emit('fire')">ATEŞ</button>
+        <button id="fireBtn" class="fire-btn" onclick="socket.emit('fire')">ATEŞ</button>
         <button id="blastBtn" class="blast-btn" onclick="useBlast()">GÜÇ (B)</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0;
+        let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let activeMode = 'bekle';
 
         function startGame(mode) {
             socket.emit('setMode', mode);
@@ -47,6 +47,7 @@
         }
 
         function useBlast() {
+            if(activeMode !== 'zombi') return;
             const now = Date.now();
             if (now - lastBlast > 15000) {
                 socket.emit('areaBlast');
@@ -64,7 +65,6 @@
             }, 1000);
         }
 
-        // Koruma: Zoom ve Scroll engelleme
         document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
         window.addEventListener('keydown', (e) => {
@@ -81,8 +81,14 @@
         socket.on('blastEffect', (pos) => { blastEffectPos = pos; blastTimer = 10; });
 
         socket.on('state', (d) => {
+            activeMode = d.mode;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             document.getElementById('waveInfo').innerText = d.mode === 'zombi' ? "DALGA: " + d.wave : d.mode.toUpperCase();
+            
+            // Görsel buton kısıtlamaları
+            document.getElementById('fireBtn').style.opacity = d.mode === 'labirent' ? "0.3" : "1";
+            document.getElementById('blastBtn').style.opacity = d.mode === 'zombi' ? "1" : "0.3";
+
             if(d.mode === 'labirent') { ctx.fillStyle = "#4CAF50"; ctx.fillRect(0, 0, canvas.width, 20); }
             ctx.fillStyle = "#333"; (d.walls || []).forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
 
