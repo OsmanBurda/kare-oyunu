@@ -8,24 +8,23 @@ app.get('/', (req, res) => { res.sendFile(__dirname + '/index.html'); });
 let rooms = {}; 
 const mazeWalls = [{ x: 0, y: 300, w: 340, h: 10 }, { x: 60, y: 220, w: 340, h: 10 }, { x: 0, y: 140, w: 340, h: 10 }, { x: 60, y: 60, w: 340, h: 10 }, { x: 0, y: 0, w: 5, h: 400 }, { x: 395, y: 0, w: 5, h: 400 }];
 
-function getRandomSpawnPos() {
-    const side = Math.floor(Math.random() * 4);
-    if(side === 0) return {x: Math.random() * 400, y: -40};
-    if(side === 1) return {x: Math.random() * 400, y: 440};
-    if(side === 2) return {x: -40, y: Math.random() * 400};
-    return {x: 440, y: Math.random() * 400};
+function getRoomList() {
+    return Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status}));
 }
 
 io.on('connection', (socket) => {
-    socket.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
+    socket.emit('roomList', getRoomList());
 
     socket.on('adminVerify', (pass) => {
-        let r = rooms[socket.roomName];
-        if(r && r.players[socket.id] && pass === "123Osman123Burda") {
-            r.players[socket.id].isAdmin = true;
-            r.players[socket.id].hp = 999;
-            socket.emit('adminSuccess');
-        }
+        const cleanPass = pass ? pass.trim() : "";
+        if(cleanPass === "123Osman123Burda") {
+            let r = rooms[socket.roomName];
+            if(r && r.players[socket.id]) {
+                r.players[socket.id].isAdmin = true;
+                r.players[socket.id].hp = 999;
+                socket.emit('adminSuccess');
+            }
+        } else { socket.emit('err', 'Hatalı Şifre!'); }
     });
 
     socket.on('createRoom', (data) => {
@@ -36,7 +35,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('joinExistingRoom', (data) => {
-        if (!rooms[data.roomName] || rooms[data.roomName].status === 'playing') return socket.emit('err', 'Giriş başarısız!');
+        if (!rooms[data.roomName] || rooms[data.roomName].status === 'playing') return socket.emit('err', 'Giriş kapalı!');
         joinProcess(socket, data.roomName, data.userName);
     });
 
@@ -44,7 +43,7 @@ io.on('connection', (socket) => {
         socket.join(rName); socket.roomName = rName;
         rooms[rName].players[socket.id] = { x: 200, y: 200, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: (rooms[rName].mode==='zombi'?10:3), active: false, lastDir: 'up', lastFire: 0, lastBlast: 0, isAdmin: false };
         socket.emit('joined', { isLeader: (rooms[rName].leader === socket.id) });
-        io.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
+        io.emit('roomList', getRoomList());
     }
 
     socket.on('startGameSignal', () => {
@@ -53,20 +52,20 @@ io.on('connection', (socket) => {
             r.status = 'playing';
             for(let id in r.players) { r.players[id].active = true; if(r.mode==='labirent'){r.players[id].x=180; r.players[id].y=360;} }
             io.to(socket.roomName).emit('gameStarted');
+            io.emit('roomList', getRoomList());
         }
     });
 
     socket.on('move', (dir) => {
         let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
-        p.lastDir = dir;
         let speed = p.isAdmin ? 40 : 20;
         let nX = p.x, nY = p.y;
         if (dir === 'up') nY -= speed; if (dir === 'down') nY += speed;
         if (dir === 'left') nX -= speed; if (dir === 'right') nX += speed;
         let walls = (r.mode === 'labirent') ? mazeWalls : [];
         let hit = walls.some(w => nX < w.x + w.w && nX + 25 > w.x && nY < w.y + w.h && nY + 25 > w.y);
-        if (!hit && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; }
+        if (!hit && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
         if (r.mode === 'labirent' && p.y <= 15) io.to(socket.roomName).emit('winner', p.name + " KAZANDI!");
     });
 
@@ -94,7 +93,7 @@ io.on('connection', (socket) => {
         if(socket.roomName && rooms[socket.roomName]) {
             delete rooms[socket.roomName].players[socket.id];
             if (Object.keys(rooms[socket.roomName].players).length === 0) delete rooms[socket.roomName];
-            io.emit('roomList', Object.keys(rooms).map(k => ({name:k, mode:rooms[k].mode, count:Object.keys(rooms[k].players).length, status:rooms[k].status})));
+            io.emit('roomList', getRoomList());
         }
     });
 });
@@ -105,7 +104,10 @@ setInterval(() => {
         if(r.mode === 'zombi') {
             let maxZ = 3 + (r.wave * 2);
             if(r.zombies.length < maxZ && r.spawned < maxZ) {
-                let pos = getRandomSpawnPos();
+                let side = Math.floor(Math.random() * 4);
+                let pos = {x:0, y:0};
+                if(side===0){pos={x:Math.random()*400, y:-40}} else if(side===1){pos={x:Math.random()*400, y:440}}
+                else if(side===2){pos={x:-40, y:Math.random()*400}} else {pos={x:440, y:Math.random()*400}}
                 r.zombies.push({ x: pos.x, y: pos.y, hp: 1 + Math.floor(r.wave/3) });
                 r.spawned++;
             }
@@ -146,5 +148,4 @@ setInterval(() => {
     }
 }, 50);
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, '0.0.0.0');
+http.listen(process.env.PORT || 3000, '0.0.0.0');
