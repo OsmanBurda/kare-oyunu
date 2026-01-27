@@ -4,21 +4,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
         * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow-x: hidden; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; }
         .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
         input { padding: 10px; border-radius: 8px; margin: 5px; width: 240px; text-align: center; user-select: text; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; }
+        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 240px; font-weight: bold; cursor: pointer; }
         .controls-grid { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; width: fit-content; margin: 5px auto; }
         .move-btn { width: 60px; height: 60px; background: #444; color: white; border-radius: 12px; border: none; font-size: 24px; }
         .fire-btn { width: 100px; height: 55px; background: #f44336; color: white; border-radius: 12px; border: none; font-weight: bold; }
         .blast-btn { width: 100px; height: 55px; background: #9c27b0; color: white; border-radius: 12px; border: none; font-weight: bold; }
+        #adminAuthPanel { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.9); z-index:400; flex-direction:column; justify-content:center; align-items:center; }
     </style>
 </head>
 <body>
+    <div id="adminAuthPanel">
+        <h3>YAPIMCI GİRİŞİ</h3>
+        <input type="password" id="adminPassInput" placeholder="Şifreyi Yaz...">
+        <button class="btn" onclick="checkAdmin()">ONAYLA</button>
+        <button class="btn" style="background:#444" onclick="document.getElementById('adminAuthPanel').style.display='none'">KAPAT</button>
+    </div>
+
+    <div onclick="openAdmin()" style="position:fixed; top:0; right:0; width:60px; height:60px; z-index:200;"></div>
+
     <div id="gameOverlay" class="overlay">
         <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="Karakter Adın">
+        <input type="text" id="nameInput" placeholder="İsmin...">
         <h4>Oda Kur</h4>
         <input type="text" id="newRoomName" placeholder="Oda Adı">
         <select id="modeSelect" style="padding: 10px; width: 240px; border-radius: 8px;">
@@ -33,11 +43,11 @@
 
     <div id="lobbyOverlay" class="overlay" style="display:none;">
         <h2 id="lobbyTitle">Lobi</h2>
-        <p>Lider bekleniyor...</p>
+        <p>Hazırlanın...</p>
         <button id="startBtn" class="btn" style="display:none; background:#ff9800;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
     </div>
 
-    <div id="adminBadge" style="display:none; color:lime; font-weight:bold;">YAPIMCI MODU AKTİF</div>
+    <div id="adminBadge" style="display:none; color:lime; font-weight:bold; margin-top:5px;">[ YAPIMCI MODU ]</div>
     <div id="status">Can: 3</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
@@ -57,12 +67,14 @@
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let activeMode = 'bekle'; let lastBlast = 0; let blastEffectPos = null; let blastTimer = 0; let isAdmin = false;
 
+        function openAdmin() { document.getElementById('adminAuthPanel').style.display='flex'; document.getElementById('adminPassInput').focus(); }
+        function checkAdmin() { socket.emit('adminVerify', document.getElementById('adminPassInput').value); document.getElementById('adminAuthPanel').style.display='none'; }
+
         socket.on('roomList', (rooms) => {
-            const container = document.getElementById('roomListContainer');
-            container.innerHTML = "";
+            const container = document.getElementById('roomListContainer'); container.innerHTML = "";
             rooms.forEach(r => {
                 const div = document.createElement('div');
-                div.innerHTML = `<span><b>${r.name}</b></span> <button class="btn" style="width:70px" onclick="joinRoom('${r.name}')">GİR</button>`;
+                div.innerHTML = `<button class="btn" style="background:#333; margin:2px" onclick="joinRoom('${r.name}')">${r.name} (${r.count} Kişi)</button>`;
                 container.appendChild(div);
             });
         });
@@ -70,22 +82,14 @@
         function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('newRoomName').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
         function joinRoom(rName) { socket.emit('joinExistingRoom', { roomName: rName, userName: document.getElementById('nameInput').value }); }
 
-        socket.on('joined', (data) => {
-            document.getElementById('gameOverlay').style.display = 'none';
-            document.getElementById('lobbyOverlay').style.display = 'flex';
-            if(data.isLeader) document.getElementById('startBtn').style.display = 'block';
-        });
-
+        socket.on('joined', (data) => { document.getElementById('gameOverlay').style.display = 'none'; document.getElementById('lobbyOverlay').style.display = 'flex'; if(data.isLeader) document.getElementById('startBtn').style.display = 'block'; });
         socket.on('gameStarted', () => { document.getElementById('lobbyOverlay').style.display = 'none'; });
         socket.on('adminSuccess', () => { isAdmin = true; document.getElementById('adminBadge').style.display = 'block'; });
 
         function useBlast() {
             if(activeMode !== 'zombi') return;
             let cd = isAdmin ? 1000 : 15000;
-            if (Date.now() - lastBlast > cd) {
-                socket.emit('areaBlast'); lastBlast = Date.now();
-                if(!isAdmin) startCooldown();
-            }
+            if (Date.now() - lastBlast > cd) { socket.emit('areaBlast'); lastBlast = Date.now(); if(!isAdmin) startCooldown(); }
         }
 
         function startCooldown() {
@@ -94,14 +98,14 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'p') { const p = prompt("Şifre?"); socket.emit('adminVerify', p); }
+            if (e.key.toLowerCase() === 'p') openAdmin();
             if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
             if (['w','arrowup'].includes(e.key.toLowerCase())) socket.emit('move', 'up');
             if (['s','arrowdown'].includes(e.key.toLowerCase())) socket.emit('move', 'down');
             if (['a','arrowleft'].includes(e.key.toLowerCase())) socket.emit('move', 'left');
             if (['d','arrowright'].includes(e.key.toLowerCase())) socket.emit('move', 'right');
             if (e.code === 'Space') socket.emit('fire');
-            if (e.key.toLowerCase() === 'b') useBlast();
+            if (e.key.toLowerCase() === 'b') useBlast(); // Sadece 'b' tuşu
         }, { passive: false });
 
         socket.on('blastEffect', (pos) => { blastEffectPos = pos; blastTimer = 10; });
