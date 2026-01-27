@@ -2,17 +2,17 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Osman Game 2026</title>
+    <title>Osman Pro 2026</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
-        #ui { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: gold; padding: 10px; border: 2px solid gold; z-index: 10; }
+        body { margin: 0; background: #000; color: gold; font-family: sans-serif; overflow: hidden; }
+        #admin { position: absolute; top: 10px; left: 10px; border: 2px solid gold; padding: 10px; background: rgba(0,0,0,0.8); z-index: 100; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <b>OSMAN ADMIN PANEL</b><br>
-        CAN: 3 | MOD: Bayrak Kapmaca<br>
-        <small>Güç: B | 4-Yön Ateş Aktif</small>
+    <div id="admin">
+        <h3 style="margin:0">OSMAN ADMIN</h3>
+        <p id="st">Mod: Bayrak Kapmaca</p>
+        <small>Can: 3 | Güç: B | 4-Yön Ateş</small>
     </div>
     <canvas id="gameCanvas"></canvas>
     <script src="index.js"></script>
