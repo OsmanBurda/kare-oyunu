@@ -8,11 +8,12 @@ app.use(express.static(__dirname));
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
 let rooms = {};
+const mazeWalls = [{ x: 0, y: 300, w: 300, h: 15 }, { x: 100, y: 200, w: 300, h: 15 }, { x: 0, y: 100, w: 300, h: 15 }];
 
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
-        const rName = data.roomName;
-        rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id };
+        const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
+        rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id, scores: { red: 0, blue: 0 } };
         joinProcess(socket, rName, data.userName);
     });
 
@@ -24,7 +25,12 @@ io.on('connection', (socket) => {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
         let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-        r.players[socket.id] = { x: 185, y: 185, name: uName, color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: hpVal, maxHp: hpVal, lastFire: 0, lastDir: 'up' };
+        r.players[socket.id] = { 
+            x: 185, y: 185, name: uName || "Osman", 
+            color: '#' + Math.floor(Math.random()*16777215).toString(16), 
+            hp: hpVal, maxHp: hpVal, lastFire: 0, lastDir: 'up',
+            team: (Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue')
+        };
         socket.emit('joined', { isLeader: (r.leader === socket.id) });
         io.to(rName).emit('updatePlayerList', Object.values(r.players).map(p => ({name: p.name})));
     }
@@ -32,10 +38,10 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id];
-        let cd = (r.mode === 'savas' ? 1000 : 250); // Savaş modu 1 saniye cooldown
+        let cd = (r.mode === 'savas' ? 1000 : 250);
 
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
-            if(r.mode === 'bayrak') { // Bayrak modunda 4 yönlü ateş
+            if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
             } else {
                 r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
@@ -58,11 +64,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('startGameSignal', () => { if(rooms[socket.roomName]) rooms[socket.roomName].status = 'playing'; io.to(socket.roomName).emit('gameStarted'); });
-    
     socket.on('disconnect', () => { if(socket.roomName && rooms[socket.roomName]) { delete rooms[socket.roomName].players[socket.id]; if(Object.keys(rooms[socket.roomName].players).length === 0) delete rooms[socket.roomName]; } });
 });
 
-// ANA DÖNGÜ (Dışarı alındı, hızlanma hatası çözüldü)
 setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n]; if(r.status !== 'playing') continue;
@@ -81,7 +85,7 @@ setInterval(() => {
                 if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) { t.hp -= 1; r.bullets.splice(i, 1); }
             }
         });
-        io.to(n).emit('state', { players: r.players, bullets: r.bullets, zombies: r.zombies, mode: r.mode });
+        io.to(n).emit('state', { players: r.players, bullets: r.bullets, zombies: r.zombies, mode: r.mode, walls: (r.mode==='labirent'?mazeWalls:[]) });
     }
 }, 50);
 
