@@ -17,29 +17,30 @@ function getRandomSpawnPos() {
     return {x: 440, y: Math.random() * 400};
 }
 
-// Odaları listelemek için yardımcı fonksiyon
 function getRoomList() {
     let list = [];
     for(let name in rooms) {
-        list.push({ name: name, mode: rooms[name].mode, count: Object.keys(rooms[name].players).length });
+        list.push({ name: name, mode: rooms[name].mode, count: Object.keys(rooms[name].players).length, status: rooms[name].status });
     }
     return list;
 }
 
 io.on('connection', (socket) => {
-    // Bağlanan herkese mevcut odaları gönder
     socket.emit('roomList', getRoomList());
 
     socket.on('createRoom', (data) => {
         const rName = data.roomName;
         if (rooms[rName]) return socket.emit('err', 'Bu oda zaten var!');
-        
-        rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, wave: 1, spawned: 0 };
+        rooms[rName] = { 
+            players: {}, bullets: [], zombies: [], mode: data.mode, 
+            wave: 1, spawned: 0, status: 'lobby', leader: socket.id 
+        };
         joinProcess(socket, rName, data.userName);
     });
 
     socket.on('joinExistingRoom', (data) => {
-        if (!rooms[data.roomName]) return socket.emit('err', 'Oda artık mevcut değil!');
+        if (!rooms[data.roomName]) return socket.emit('err', 'Oda bulunamadı!');
+        if (rooms[data.roomName].status === 'playing') return socket.emit('err', 'Oyun çoktan başladı!');
         joinProcess(socket, data.roomName, data.userName);
     });
 
@@ -50,13 +51,27 @@ io.on('connection', (socket) => {
         r.players[socket.id] = { 
             x: 200, y: 200, name: uName || "Adsız", 
             color: '#' + Math.floor(Math.random()*16777215).toString(16),
-            hp: (r.mode === 'zombi' ? 10 : 3), active: true, lastDir: 'up', lastFire: 0, lastBlast: 0 
+            hp: (r.mode === 'zombi' ? 10 : 3), active: false, lastDir: 'up', lastFire: 0, lastBlast: 0 
         };
-        io.emit('roomList', getRoomList()); // Oda listesini güncelle
+        socket.emit('joined', { isLeader: (r.leader === socket.id) });
+        io.emit('roomList', getRoomList());
     }
 
+    socket.on('startGameSignal', () => {
+        let r = rooms[socket.roomName];
+        if(r && r.leader === socket.id) {
+            r.status = 'playing';
+            for(let id in r.players) {
+                r.players[id].active = true;
+                if(r.mode === 'labirent') { r.players[id].x = 180; r.players[id].y = 360; }
+            }
+            io.to(socket.roomName).emit('gameStarted');
+            io.emit('roomList', getRoomList());
+        }
+    });
+
     socket.on('move', (dir) => {
-        let r = rooms[socket.roomName]; if(!r) return;
+        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
         p.lastDir = dir;
         let nX = p.x, nY = p.y;
@@ -69,7 +84,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('fire', () => {
-        let r = rooms[socket.roomName]; if(!r || r.mode === 'labirent') return;
+        let r = rooms[socket.roomName]; if(!r || r.mode === 'labirent' || r.status !== 'playing') return;
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastFire > 150) {
             r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id });
@@ -78,7 +93,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('areaBlast', () => {
-        let r = rooms[socket.roomName]; if(!r || r.mode !== 'zombi') return;
+        let r = rooms[socket.roomName]; if(!r || r.mode !== 'zombi' || r.status !== 'playing') return;
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastBlast > 15000) {
             p.lastBlast = Date.now();
@@ -91,6 +106,10 @@ io.on('connection', (socket) => {
         if(socket.roomName && rooms[socket.roomName]) {
             delete rooms[socket.roomName].players[socket.id];
             if (Object.keys(rooms[socket.roomName].players).length === 0) delete rooms[socket.roomName];
+            else if(rooms[socket.roomName].leader === socket.id) {
+                rooms[socket.roomName].leader = Object.keys(rooms[socket.roomName].players)[0];
+                io.to(rooms[socket.roomName].leader).emit('joined', { isLeader: true });
+            }
             io.emit('roomList', getRoomList());
         }
     });
@@ -98,7 +117,7 @@ io.on('connection', (socket) => {
 
 setInterval(() => {
     for(let name in rooms) {
-        let r = rooms[name];
+        let r = rooms[name]; if(r.status !== 'playing') continue;
         if(r.mode === 'zombi') {
             let maxZ = 3 + (r.wave * 2);
             if(r.zombies.length < maxZ && r.spawned < maxZ) {
