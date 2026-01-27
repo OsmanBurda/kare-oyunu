@@ -13,7 +13,6 @@ const mazeWalls = [{ x: 0, y: 300, w: 300, h: 15 }, { x: 100, y: 200, w: 300, h:
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
         const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
-        // Osman'ın Modları: bayrak kapmaca eklendi
         rooms[rName] = { 
             players: {}, bullets: [], zombies: [], 
             mode: data.mode, status: 'lobby', leader: socket.id, 
@@ -22,52 +21,35 @@ io.on('connection', (socket) => {
         joinProcess(socket, rName, data.userName);
     });
 
-    socket.on('joinExistingRoom', (data) => {
-        if (rooms[data.roomName] && rooms[data.roomName].status === 'lobby') joinProcess(socket, data.roomName, data.userName);
-    });
-
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
-        // OSMAN KURALI: Savaş modunda 3 can, diğerlerinde 1 HP
+        // OSMAN KURALI: Savaş modunda 3 can
         let hp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1)); 
         r.players[socket.id] = { 
             id: socket.id, x: 185, y: 185, 
             name: uName || "Osman", 
-            color: '#' + Math.floor(Math.random()*16777215).toString(16), 
             hp: hp, lastDir: 'up', lastFire: 0 
         };
-        socket.emit('joined', { isLeader: (r.leader === socket.id) });
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players), leaderId: r.leader});
     }
 
-    // OSMAN KURALI: 'b' tuşu özel gücü ve 4 yöne ateş
-    socket.on('specialPower', () => {
-        let r = rooms[socket.roomName];
-        if(r) console.log(socket.id + " 'b' tuşuna bastı!");
-    });
-
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        if(!p || p.hp <= 0) return;
-        
-        // OSMAN KURALI: Bayrak kapmacada ateş edilmiyor
-        if(r.mode === 'bayrak') return; 
+        if(!p || p.hp <= 0 || r.mode === 'bayrak') return; 
 
         // OSMAN KURALI: Savaş modunda 1 saniye (1000ms) cooldown
         let cooldown = (r.mode === 'savas' ? 1000 : 200);
         
         if(Date.now() - p.lastFire > cooldown) {
             // OSMAN KURALI: 4 tarafa ateş etme
-            const dirs = ['up', 'down', 'left', 'right'];
-            dirs.forEach(d => {
+            ['up', 'down', 'left', 'right'].forEach(d => {
                 r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: d, owner: socket.id });
             });
             p.lastFire = Date.now();
         }
     });
 
-    // ... (Hareket ve Zombi mantığı aynı kalıyor)
     socket.on('move', (dir) => {
         let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
@@ -79,7 +61,10 @@ io.on('connection', (socket) => {
     setInterval(() => {
         for(let n in rooms) {
             let r = rooms[n]; if(r.status !== 'playing') continue;
-            // Mermi ve State güncellemeleri
+            // Mermi hareketleri...
+            r.bullets.forEach((b, bi) => {
+                b.x += (b.dir==='left'?-15:(b.dir==='right'?15:0)); b.y += (b.dir==='up'?-15:(b.dir==='down'?15:0));
+            });
             io.to(n).emit('state', { players: r.players, mode: r.mode, bullets: r.bullets, zombies: r.zombies });
         }
     }, 50);
