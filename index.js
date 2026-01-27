@@ -16,15 +16,14 @@ io.on('connection', (socket) => {
     socket.emit('roomList', getRoomList());
 
     socket.on('adminVerify', (pass) => {
-        const cleanPass = pass ? pass.trim() : "";
-        if(cleanPass === "123Osman123Burda") {
+        if(pass && pass.trim() === "123Osman123Burda") {
             let r = rooms[socket.roomName];
             if(r && r.players[socket.id]) {
                 r.players[socket.id].isAdmin = true;
                 r.players[socket.id].hp = 999;
                 socket.emit('adminSuccess');
-            } else { socket.emit('err', 'Hata: Önce odaya gir!'); }
-        } else { socket.emit('err', 'Hatalı Şifre!'); }
+            } else { socket.emit('err', 'Önce odaya gir!'); }
+        } else { socket.emit('err', 'Yanlış Şifre!'); }
     });
 
     socket.on('createRoom', (data) => {
