@@ -3,93 +3,93 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        /* SCROLL VE ZOOM ENGELİ CSS */
-        * { touch-action: manipulation; -webkit-text-size-adjust: none; user-select: none; box-sizing: border-box; }
-        body { background: #222; color: white; font-family: sans-serif; margin: 0; padding: 10px 0; text-align: center; overflow-y: auto; min-height: 100vh; }
-        
-        #gameOverlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; touch-action: none; display: block; margin: 0 auto; }
-        
-        /* MOBİL KONTROLLER */
-        .move-controls { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; margin: 10px auto; width: fit-content; }
-        .move-controls button { width: 70px; height: 70px; font-size: 26px; background: #4CAF50; color: white; border: none; border-radius: 12px; cursor: pointer; }
-        .fire-btn { width: 150px; height: 60px; background: #f44336; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 20px; margin-top: 5px; cursor: pointer; }
-        
-        #status { color: #ffeb3b; font-size: 18px; margin-bottom: 5px; height: 25px; }
-        #waveInfo { font-size: 20px; color: #ff5722; font-weight: bold; display: none; }
-        input { padding: 12px; font-size: 16px; border-radius: 5px; margin-bottom: 15px; text-align: center; width: 85%; max-width: 300px; user-select: text; }
-        .btn { padding: 12px 20px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; font-size: 14px; width: 220px; }
+        * { touch-action: manipulation; user-select: none; box-sizing: border-box; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; overflow-y: auto; font-family: sans-serif; }
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; touch-action: none; }
+        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; }
+        .fire-btn { width: 120px; height: 50px; background: #f44336; color: white; border-radius: 10px; border: none; }
+        .blast-btn { width: 120px; height: 50px; background: #9c27b0; color: white; border-radius: 10px; margin-left: 5px; border: none; }
     </style>
 </head>
 <body>
-    <div id="gameOverlay">
-        <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="Adını Yaz...">
-        <button class="btn" onclick="startGame('labirent')">LABİRENT MODU</button>
-        <button class="btn" onclick="startGame('savas')" style="background:#2196F3">SAVAŞ (PvP)</button>
-        <button class="btn" onclick="startGame('zombi')" style="background:#f44336">ZOMBİ (PvE)</button>
+    <div id="gameOverlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; justify-content:center; align-items:center;">
+        <button class="btn" onclick="startGame('zombi')">ZOMBİ MODUNU BAŞLAT</button>
     </div>
-
+    <div id="status">Can: 10</div>
     <div id="waveInfo">DALGA: 1</div>
-    <div id="status">Hazır!</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    
-    <div class="move-controls">
-        <button style="grid-area: up" onclick="socket.emit('move', 'up')">▲</button>
-        <button style="grid-area: left" onclick="socket.emit('move', 'left')">◀</button>
-        <button style="grid-area: right" onclick="socket.emit('move', 'right')">▶</button>
-        <button style="grid-area: down" onclick="socket.emit('move', 'down')">▼</button>
+    <div style="margin-top: 10px;">
+        <button class="fire-btn" onclick="socket.emit('fire')">ATEŞ</button>
+        <button id="blastBtn" class="blast-btn" onclick="useBlast()">ÖZEL GÜÇ (B)</button>
     </div>
-    <button class="fire-btn" onclick="socket.emit('fire')">ATEŞ ET!</button>
-    <div style="height: 40px;"></div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        
+        let lastBlast = 0;
+        let blastEffectPos = null;
+        let blastTimer = 0;
+
         function startGame(mode) {
-            socket.emit('setName', document.getElementById('nameInput').value);
             socket.emit('setMode', mode);
             document.getElementById('gameOverlay').style.display = 'none';
         }
 
-        // 1. MOBİL ZOOM KİLİDİ (JS)
+        function useBlast() {
+            const now = Date.now();
+            if (now - lastBlast > 15000) {
+                socket.emit('areaBlast');
+                lastBlast = now;
+                startCooldown();
+            }
+        }
+
+        function startCooldown() {
+            let btn = document.getElementById('blastBtn');
+            let sn = 15; btn.disabled = true;
+            let timer = setInterval(() => {
+                sn--; btn.innerText = "BEKLE: " + sn;
+                if(sn <= 0) { clearInterval(timer); btn.disabled = false; btn.innerText = "ÖZEL GÜÇ (B)"; }
+            }, 1000);
+        }
+
+        // Zoom ve kaydırma koruması her zaman devrede
         document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-        
-        // 2. KLAVYE TUŞLARI (WASD + OKLAR + SPACE)
+
         window.addEventListener('keydown', (e) => {
-            if(["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
             const key = e.key.toLowerCase();
+            if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+            
             if (key === 'w' || e.code === 'ArrowUp') socket.emit('move', 'up');
             if (key === 's' || e.code === 'ArrowDown') socket.emit('move', 'down');
             if (key === 'a' || e.code === 'ArrowLeft') socket.emit('move', 'left');
             if (key === 'd' || e.code === 'ArrowRight') socket.emit('move', 'right');
             if (e.code === 'Space') socket.emit('fire');
+            
+            // Sadece 'b' tuşu özel gücü çalıştırır, 'q' iptal edildi
+            if (key === 'b') useBlast();
         }, { passive: false });
+
+        socket.on('blastEffect', (pos) => { blastEffectPos = pos; blastTimer = 10; });
 
         socket.on('state', (d) => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            document.getElementById('waveInfo').style.display = d.mode === 'zombi' ? 'block' : 'none';
-            if(d.mode === 'zombi') document.getElementById('waveInfo').innerText = "DALGA: " + d.wave;
+            document.getElementById('waveInfo').innerText = "DALGA: " + d.wave;
             
-            if(d.mode === 'labirent') { ctx.fillStyle = "#4CAF50"; ctx.fillRect(0, 0, canvas.width, 20); }
-            ctx.fillStyle = "#333"; (d.walls || []).forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
-            (d.zombies || []).forEach(z => { ctx.fillStyle = "#2e7d32"; ctx.fillRect(z.x, z.y, 25, 25); });
-            (d.bullets || []).forEach(b => { 
-                ctx.fillStyle = d.mode==='zombi' ? "#ffeb3b" : "#f44336"; 
-                ctx.fillRect(b.x, b.y, 8, 8); 
-            });
+            if(blastEffectPos && blastTimer > 0) {
+                ctx.beginPath(); ctx.arc(blastEffectPos.x, blastEffectPos.y, 150, 0, Math.PI*2);
+                ctx.strokeStyle = "rgba(156, 39, 176, 0.7)"; ctx.lineWidth = 8; ctx.stroke(); blastTimer--;
+            }
+
+            (d.zombies || []).forEach(z => { ctx.fillStyle = "green"; ctx.fillRect(z.x, z.y, 25, 25); });
+            (d.bullets || []).forEach(b => { ctx.fillStyle = "yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             
             for (let id in d.players) {
                 let p = d.players[id]; if(!p.active || p.hp <= 0) continue;
                 ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                ctx.fillStyle = "black"; ctx.font = "bold 13px Arial";
-                ctx.fillText(p.name + " (" + p.hp + ")", p.x - 5, p.y - 5);
                 if(id === socket.id) document.getElementById('status').innerText = "Can: " + p.hp;
             }
         });
-
-        socket.on('winner', (msg) => { alert(msg); location.reload(); });
     </script>
 </body>
 </html>
