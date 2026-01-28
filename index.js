@@ -11,6 +11,7 @@ let rooms = {};
 const mazeWalls = [{ x: 0, y: 300, w: 300, h: 15 }, { x: 100, y: 200, w: 300, h: 15 }, { x: 0, y: 100, w: 300, h: 15 }];
 
 io.on('connection', (socket) => {
+    // Giriş yapan herkese aktif odaları göster
     socket.emit('roomList', Object.keys(rooms).filter(r => rooms[r].status === 'lobby'));
 
     socket.on('createRoom', (data) => {
@@ -34,16 +35,29 @@ io.on('connection', (socket) => {
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players)});
     }
 
+    // ÖZEL GÜÇ (B TUŞU) - Zombi modunda aktif ve güçlü!
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; 
         if(!r || r.mode === 'savas' || r.mode === 'labirent') return; 
         let p = r.players[socket.id];
-        // BEKLEME SÜRESİ AZALTILDI: 5 saniyeden 1 saniyeye
-        if(p && p.hp > 0 && Date.now() - p.lastSpecial > 1000) { 
+        if(p && p.hp > 0 && Date.now() - p.lastSpecial > 800) { 
             p.lastSpecial = Date.now();
             io.to(socket.roomName).emit('specialEffect', {x: p.x + 12, y: p.y + 12});
-            // MENZİL ARTIRILDI: 120 -> 160
-            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 160);
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 180);
+        }
+    });
+
+    socket.on('startGameSignal', () => {
+        let r = rooms[socket.roomName];
+        if(r && r.leader === socket.id) {
+            r.status = 'playing';
+            io.emit('roomList', Object.keys(rooms).filter(rn => rooms[rn].status === 'lobby'));
+            for(let id in r.players) { 
+                let p = r.players[id]; 
+                if(r.mode === 'zombi') { p.x = 185; p.y = 185; } // Güvenli Merkez Doğuşu
+                else { p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350); p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350); }
+            }
+            io.to(socket.roomName).emit('gameStarted');
         }
     });
 
@@ -54,19 +68,16 @@ io.on('connection', (socket) => {
         if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20; if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
         let walls = (r.mode === 'labirent' ? mazeWalls : []);
         if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
+        if(r.mode === 'labirent' && p.y < 40 && p.x < 40) io.to(socket.roomName).emit('winner', p.name + " Kazandı!");
     });
 
-    socket.on('startGameSignal', () => {
-        let r = rooms[socket.roomName];
-        if(r && r.leader === socket.id) {
-            r.status = 'playing';
-            io.emit('roomList', Object.keys(rooms).filter(rn => rooms[rn].status === 'lobby'));
-            for(let id in r.players) { 
-                let p = r.players[id]; 
-                if(r.mode === 'zombi') { p.x = 185; p.y = 185; }
-                else { p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350); p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350); }
-            }
-            io.to(socket.roomName).emit('gameStarted');
+    socket.on('fire', () => {
+        let r = rooms[socket.roomName]; if(!r || r.mode === 'labirent') return; 
+        let p = r.players[socket.id];
+        let rate = (r.mode === 'savas' ? 1000 : 200);
+        if(p && p.hp > 0 && Date.now() - p.lastFire > rate) { 
+            r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id }); 
+            p.lastFire = Date.now(); 
         }
     });
 
@@ -77,20 +88,17 @@ io.on('connection', (socket) => {
                 if(r.zombies.length === 0) r.wave++; 
                 if(r.zombies.length < r.wave + 2) {
                     let side = Math.floor(Math.random() * 4);
-                    let zX, zY;
-                    if(side === 0) { zX = Math.random() * 380; zY = 0; }
-                    else if(side === 1) { zX = Math.random() * 380; zY = 380; }
-                    else if(side === 2) { zX = 0; zY = Math.random() * 380; }
-                    else { zX = 380; zY = Math.random() * 380; }
+                    let zX = (side === 2 ? 0 : (side === 3 ? 380 : Math.random()*380));
+                    let zY = (side === 0 ? 0 : (side === 1 ? 380 : Math.random()*380));
                     r.zombies.push({x: zX, y: zY});
                 }
                 r.zombies.forEach(z => { 
                     let targets = Object.values(r.players).filter(p => p.hp > 0); 
                     if(targets.length > 0) { 
-                        // ZOMBİ HIZI DAHA DA DÜŞÜRÜLDÜ: 0.4 -> 0.25
-                        z.x += (z.x < targets[0].x ? 0.25 : -0.25); 
-                        z.y += (z.y < targets[0].y ? 0.25 : -0.25); 
-                        if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1; 
+                        // ZOMBİLER ÇOK YAVAŞ: 0.2
+                        z.x += (z.x < targets[0].x ? 0.2 : -0.2); 
+                        z.y += (z.y < targets[0].y ? 0.2 : -0.2); 
+                        if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.05; 
                     } 
                 });
             }
