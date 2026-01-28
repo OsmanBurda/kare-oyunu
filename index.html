@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        /* TÜM DOKUNMATİK HAREKETLERİ KİLİTLE */
+        /* 2. Kilit: CSS ile tüm ekranı dondur */
         * { 
             touch-action: none !important; 
             -webkit-user-select: none !important; 
@@ -20,18 +20,18 @@
             background: #111; 
             margin: 0; 
             padding: 0; 
-            font-family: sans-serif; 
         }
 
         #ui-top { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; color: #4CAF50; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
         #wave-panel { width: 320px; height: 40px; background: #222; margin: 5px auto; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid #333; font-weight: bold; color: white; }
 
+        /* Buton yerleşimi resimdeki düzene sadıktır */
         .controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; }
         .dpad { display: grid; grid-template-areas: ". u ." "l . r" ". d ."; gap: 10px; }
         .action { display: flex; flex-direction: column; gap: 20px; align-items: center; justify-content: center; }
         .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid #444; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-        .btn-b { background: blue !important; border-color: #00008b; font-weight: bold; }
+        .btn-b { background: blue !important; border-color: #00008b; }
         .btn-fire { background: #b22222 !important; border-color: #800000; width: 80px; height: 80px; font-size: 35px; }
         
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
@@ -51,7 +51,7 @@
 
     <div id="ui-top"><span id="hpText">Can: -</span><span id="modText">MOD: -</span></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div id="wave-panel" id="statsRow">HAZIR</div>
+    <div id="wave-panel">HAZIR</div>
 
     <div class="controls">
         <div class="dpad">
@@ -71,16 +71,12 @@
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let blast = null;
 
-        // --- YAKINLAŞTIRMA KİLİDİ ---
-        // Çift tıklamayı engelle
+        // 3. Kilit: Çift tıklama ve parmak açma hareketlerini JS ile durdur
         document.addEventListener('touchstart', (e) => {
             if (e.touches.length > 1) { e.preventDefault(); }
         }, { passive: false });
 
-        // İki parmakla yakınlaştırmayı (pinch-to-zoom) engelle
-        document.addEventListener('gesturestart', (e) => {
-            e.preventDefault();
-        });
+        document.addEventListener('gesturestart', (e) => { e.preventDefault(); });
 
         socket.on('blastEffect', d => { blast = { ...d, r: 0 }; });
         socket.on('state', r => {
@@ -107,11 +103,6 @@
             document.getElementById('hpText').innerText = "Can: " + Math.ceil(Object.values(r.players)[0]?.hp || 0);
             document.getElementById('modText').innerText = "MOD: " + r.mode.toUpperCase();
             document.getElementById('wave-panel').innerText = (r.mode === 'bayrak' ? `SKOR: RED ${r.scores.red} - BLUE ${r.scores.blue}` : `DALGA: ${r.wave}`);
-            
-            if(r.winner) { 
-                alert("KAZANAN: " + r.winner.toUpperCase()); 
-                location.reload(); 
-            }
         });
     </script>
 </body>
