@@ -24,8 +24,9 @@ io.on('connection', (socket) => {
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
-        let hp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-        r.players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: hp, lastDir: 'up', lastFire: 0, lastSpecial: 0 };
+        // CAN AYARI: VS MODU 3 CAN
+        let initialHp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
+        r.players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: initialHp, lastDir: 'up', lastFire: 0, lastSpecial: 0 };
         socket.emit('joined', { isLeader: (r.leader === socket.id) });
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players)});
     }
@@ -63,7 +64,8 @@ io.on('connection', (socket) => {
 
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        if(p && p.hp > 0 && Date.now() - p.lastFire > (r.mode === 'savas' ? 1000 : 200)) { 
+        let rate = (r.mode === 'savas' ? 1000 : 200);
+        if(p && p.hp > 0 && Date.now() - p.lastFire > rate) { 
             r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id }); 
             p.lastFire = Date.now(); 
         }
