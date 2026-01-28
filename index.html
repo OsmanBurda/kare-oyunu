@@ -12,6 +12,7 @@
         .fire-btn { background: #f44336 !important; width: 100px; }
         #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
         input, select { padding: 12px; margin: 10px; width: 220px; border-radius: 8px; }
+        #score-board { font-size: 18px; margin-bottom: 5px; display: none; }
     </style>
 </head>
 <body>
@@ -20,13 +21,19 @@
         <input type="text" id="name" placeholder="İsim">
         <select id="mode">
             <option value="zombi">Zombi (Dalga Sistemi)</option>
-            <option value="bayrak">Bayrak (Duvarlı)</option>
+            <option value="bayrak">Bayrak Kapmaca</option>
             <option value="vs">Savaş (VS)</option>
         </select>
         <button class="btn" onclick="start()" style="width:150px; background:#4CAF50">BAŞLA</button>
     </div>
-    <div id="status" style="font-weight:bold; color:#FFD700; height: 25px;"></div>
+
+    <div id="status-bar" style="height: 50px;">
+        <div id="score-board">🔴 Kırmızı: <span id="s-red">0</span> - 🔵 Mavi: <span id="s-blue">0</span></div>
+        <div id="status" style="font-weight:bold; color:#FFD700;">Yükleniyor...</div>
+    </div>
+
     <canvas id="gameCanvas" width="400" height="400"></canvas>
+
     <div class="controls">
         <div class="move-grid">
             <button class="btn" style="grid-area: up" onpointerdown="socket.emit('move','up')">▲</button>
@@ -39,26 +46,39 @@
             <button class="btn" style="background:#ff9800; width:80px;" onpointerdown="socket.emit('specialPower')">B</button>
         </div>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const ctx = document.getElementById('gameCanvas').getContext('2d');
         let effect = null;
-        function start() { socket.emit('createRoom', {userName: document.getElementById('name').value, mode: document.getElementById('mode').value}); document.getElementById('menu').style.display='none'; }
+        
+        function start() { 
+            socket.emit('createRoom', {userName: document.getElementById('name').value, mode: document.getElementById('mode').value}); 
+            document.getElementById('menu').style.display='none'; 
+        }
+
+        socket.on('gameOver', (d) => { alert((d.winner === 'red' ? "KIRMIZI" : "MAVİ") + " TAKIM KAZANDI!"); });
+
         socket.on('specialEffect', d => { 
             effect = {x: d.x, y: d.y, r: 0, opacity: 1};
             let anim = setInterval(() => { effect.r += 10; effect.opacity -= 0.1; if(effect.r > 100) { clearInterval(anim); effect = null; } }, 20);
         });
+
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-            
-            if(d.mode === 'bayrak') {
-                // Duvarları Çiz (Gri Bloklar)
-                ctx.fillStyle = "#777"; 
-                d.walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+
+            // SKOR TABLOSU GÜNCELLEME
+            if (d.mode === 'bayrak') {
+                document.getElementById('score-board').style.display = 'block';
+                document.getElementById('s-red').innerText = d.scores.red;
+                document.getElementById('s-blue').innerText = d.scores.blue;
                 
-                // Bayrakları Çiz (Eğer alınmadıysa yerde durur)
+                // Duvarlar ve Bayraklar
+                ctx.fillStyle = "#777"; d.walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
                 if (!d.flags.red.taken) { ctx.fillStyle = "red"; ctx.fillRect(d.flags.red.x, d.flags.red.y, 20, 20); }
                 if (!d.flags.blue.taken) { ctx.fillStyle = "blue"; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 20, 20); }
+            } else {
+                document.getElementById('score-board').style.display = 'none';
             }
 
             if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle=`rgba(0, 255, 255, ${effect.opacity})`; ctx.lineWidth=8; ctx.stroke(); }
@@ -69,13 +89,13 @@
             for(let id in d.players) {
                 let p = d.players[id]; 
                 ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25);
+                if(p.hasFlag) { ctx.fillStyle = "gold"; ctx.beginPath(); ctx.arc(p.x+12, p.y-10, 8, 0, Math.PI*2); ctx.fill(); }
                 
-                // Bayrak Taşıyorsa Üstünde Belirt
-                if(p.hasFlag) {
-                    ctx.fillStyle = "gold"; ctx.beginPath(); ctx.arc(p.x+12, p.y-10, 8, 0, Math.PI*2); ctx.fill();
+                if(id===socket.id) {
+                    // CAN GÖSTERGESİ (EKSİYE DÜŞMEZ)
+                    let displayHp = Math.max(0, Math.ceil(p.hp));
+                    document.getElementById('status').innerText = (d.mode==='zombi' ? "Dalga: "+d.wave+" | " : "") + "Can: " + displayHp;
                 }
-
-                if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi' ? "Dalga: "+d.wave+" | " : "") + "Can: " + Math.ceil(p.hp);
             }
         });
     </script>
