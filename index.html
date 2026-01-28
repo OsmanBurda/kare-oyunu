@@ -3,54 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Osman Oyun</title>
     <style>
-        /* CSS ZOOM VE KAYDIRMA KİLİDİ */
+        /* KESİN ZOOM KİLİDİ */
         * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
         body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
         
         #topPanel { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; color: #4CAF50; font-size: 18px; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
         
-        #infoPanel { width: 320px; height: 45px; background: #222; margin: 5px auto; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid #444; }
-
-        /* TUŞ TAKIMI DÜZENİ */
+        /* TUŞ TAKIMI */
         .controls-wrapper { position: absolute; bottom: 30px; width: 100%; height: 180px; display: flex; justify-content: space-between; padding: 0 25px; box-sizing: border-box; pointer-events: none; }
         .controls-wrapper > * { pointer-events: auto; }
         .d-pad { display: grid; grid-template-areas: ". u ." "l . r" ". d ."; gap: 10px; }
         .btn-up { grid-area: u; } .btn-down { grid-area: d; } .btn-left { grid-area: l; } .btn-right { grid-area: r; }
         .action-pad { display: flex; flex-direction: column; gap: 15px; align-items: center; justify-content: flex-end; }
         .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; color: white; }
-        .btn-b { background: blue !important; border-color: #00008b; font-weight: bold; }
+        .btn-b { background: blue !important; border-color: #00008b; }
         .btn-fire { background: #b22222 !important; width: 85px; height: 85px; font-size: 35px; border-color: #800000; }
         
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .overlay input, .overlay select, .overlay button { padding: 12px; margin: 8px; width: 220px; border-radius: 8px; border: none; font-size: 16px; }
-        .overlay button { background: #4CAF50; color: white; font-weight: bold; cursor: pointer; }
     </style>
 </head>
-<body oncontextmenu="return false;">
+<body>
     <div id="gameOverlay" class="overlay">
-        <h1 style="color:#4CAF50;">OSMAN OYUN</h1>
-        <input type="text" id="nameInput" placeholder="İsminizi Girin" value="Osman">
-        <select id="modeSelect">
-            <option value="savas">SAVAŞ MODU</option>
-            <option value="zombi">ZOMBİ MODU</option>
-            <option value="bayrak">BAYRAK MODU</option>
-        </select>
-        <button id="startButton">OYUNA BAŞLA</button>
+        <h2>OSMAN OYUN</h2>
+        <button onclick="socket.emit('createRoom', {mode: 'zombi', userName: 'Osman'})" style="padding:20px; background:green; color:white; border-radius:10px;">BAŞLA</button>
     </div>
 
-    <div id="topPanel">
-        <span id="hpDisplay">Can: -</span>
-        <span id="modeDisplay">MOD: -</span>
-    </div>
-    
+    <div id="topPanel"><span id="hpDisplay">Can: -</span><span id="modeDisplay">MOD: -</span></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-
-    <div id="infoPanel">
-        <div id="statsRow" style="font-weight:bold; color:white;">HAZIR</div>
-    </div>
 
     <div class="controls-wrapper">
         <div class="d-pad">
@@ -67,108 +48,34 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
+        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let blastEffect = null;
 
-        // JAVASCRIPT ZOOM KİLİDİ
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) e.preventDefault();
-        }, { passive: false });
+        // JS ZOOM ENGELİ
+        document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
-        let lastTouchTime = 0;
-        document.addEventListener('touchend', (e) => {
-            const now = Date.now();
-            if (now - lastTouchTime <= 300) e.preventDefault();
-            lastTouchTime = now;
-        }, false);
+        socket.on('joined', () => document.getElementById('gameOverlay').style.display='none');
+        socket.on('blastEffect', d => { blastEffect = { ...d, r: 0 }; });
 
-        // OYUNU BAŞLATMA
-        document.getElementById('startButton').onclick = () => {
-            const name = document.getElementById('nameInput').value;
-            const mode = document.getElementById('modeSelect').value;
-            socket.emit('createRoom', { mode: mode, userName: name });
-        };
-
-        socket.on('joined', () => {
-            document.getElementById('gameOverlay').style.display = 'none';
-        });
-
-        socket.on('blastEffect', data => {
-            blastEffect = { ...data, r: 0 };
-        });
-
-        socket.on('state', (room) => {
-            ctx.clearRect(0, 0, 400, 400);
-
-            // 1. BAYRAKLARI ÇİZ (Bayrak Modu)
-            if (room.mode === 'bayrak' && room.flags) {
-                // Kırmızı Bayrak
-                ctx.fillStyle = "red";
-                ctx.fillRect(room.flags.red.x, room.flags.red.y, 20, 20);
-                // Mavi Bayrak
-                ctx.fillStyle = "blue";
-                ctx.fillRect(room.flags.blue.x, room.flags.blue.y, 20, 20);
+        socket.on('state', d => {
+            ctx.clearRect(0,0,400,400);
+            
+            // ALAN HASARI RENGİ (Mavi Geri Geldi)
+            if(blastEffect) {
+                ctx.beginPath(); ctx.arc(blastEffect.x, blastEffect.y, blastEffect.r, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(0, 0, 255, ${0.4 - (blastEffect.r/80)})`;
+                ctx.fill(); ctx.strokeStyle = "white"; ctx.stroke();
+                blastEffect.r += 8; if(blastEffect.r > 80) blastEffect = null;
             }
 
-            // 2. ÖZEL GÜÇ EFEKTİ (B TUŞU - 80 Menzil)
-            if (blastEffect) {
-                ctx.beginPath();
-                ctx.arc(blastEffect.x, blastEffect.y, blastEffect.r, 0, Math.PI * 2);
-                ctx.fillStyle = `rgba(0, 0, 255, ${0.3 - (blastEffect.r / blastEffect.range)})`;
-                ctx.fill();
-                ctx.strokeStyle = "white";
-                ctx.stroke();
-                blastEffect.r += 10;
-                if (blastEffect.r > blastEffect.range) blastEffect = null;
-            }
-
-            // 3. OYUNCULARI ÇİZ
-            Object.values(room.players).forEach(p => {
-                if (p.hp > 0) {
-                    ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
+            Object.values(d.players).forEach(p => {
+                if(p.hp > 0) {
+                    ctx.fillStyle = p.team === 'red' ? 'red' : 'blue';
                     ctx.fillRect(p.x, p.y, 25, 25);
-                    
-                    // Bayrak taşıyanın etrafında sarı çerçeve
-                    if (p.hasFlag) {
-                        ctx.strokeStyle = "yellow";
-                        ctx.lineWidth = 3;
-                        ctx.strokeRect(p.x - 2, p.y - 2, 29, 29);
-                    }
-
-                    // Kendi canını güncelle
-                    if (p.name === document.getElementById('nameInput').value) {
-                        document.getElementById('hpDisplay').innerText = "Can: " + Math.ceil(p.hp);
-                    }
+                    document.getElementById('hpDisplay').innerText = "Can: " + Math.ceil(p.hp);
                 }
             });
-
-            // 4. MERMİLERİ ÇİZ
-            room.bullets.forEach(b => {
-                ctx.fillStyle = 'orange';
-                ctx.fillRect(b.x, b.y, 8, 8);
-            });
-
-            // 5. ZOMBİLERİ ÇİZ
-            room.zombies.forEach(z => {
-                ctx.fillStyle = '#2ecc71';
-                ctx.fillRect(z.x, z.y, 25, 25);
-            });
-
-            // PANEL BİLGİLERİNİ GÜNCELLE
-            document.getElementById('modeDisplay').innerText = "MOD: " + room.mode.toUpperCase();
-            if (room.mode === 'bayrak') {
-                document.getElementById('statsRow').innerText = `SKOR: RED ${room.scores.red} - BLUE ${room.scores.blue}`;
-            } else {
-                document.getElementById('statsRow').innerText = `DALGA: ${room.wave}`;
-            }
-
-            // KAZANMA DURUMU
-            if (room.winner) {
-                alert("OYUN BİTTİ! KAZANAN: " + room.winner.toUpperCase());
-                location.reload();
-            }
+            d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
     </script>
 </body>
