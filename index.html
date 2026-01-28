@@ -3,19 +3,24 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
+        /* Zoom Koruması: Tüm ekran için dokunma eylemlerini kısıtla */
+        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
         body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
-        #infoPanel { width: 320px; min-height: 60px; background: #222; margin: 5px auto; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #444; }
+        /* İşaretlediğin Panelin Stili */
+        #infoPanel { 
+            width: 320px; min-height: 60px; background: #222; margin: 5px auto; 
+            border-radius: 10px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #444;
+            pointer-events: none; /* Panele tıklamayı engeller, zoom yapamazsın */
+        }
         .stats { display: flex; justify-content: space-around; font-weight: bold; font-size: 14px; }
         .controls { position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-around; align-items: center; }
         .ctrl-btn { width: 65px; height: 65px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
-        .fire { background: #900 !important; width: 80px; height: 80px; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .fire { background: #900 !important; width: 85px; height: 85px; }
     </style>
 </head>
-<body>
-    <div id="gameOverlay" class="overlay">
+<body oncontextmenu="return false;">
+    <div id="gameOverlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center;">
         <h2>OSMAN OYUN</h2>
         <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; margin-bottom:10px;">
         <select id="modeSelect" style="padding:10px; margin-bottom:10px;">
@@ -39,10 +44,10 @@
 
     <div class="controls">
         <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:8px;">
-            <div class="ctrl-btn" style="grid-area:u" ontouchstart="socket.emit('move','up')">▲</div>
-            <div class="ctrl-btn" style="grid-area:l" ontouchstart="socket.emit('move','left')">◀</div>
-            <div class="ctrl-btn" style="grid-area:d" ontouchstart="socket.emit('move','down')">▼</div>
-            <div class="ctrl-btn" style="grid-area:r" ontouchstart="socket.emit('move','right')">▶</div>
+            <div class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</div>
+            <div class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</div>
+            <div class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</div>
+            <div class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</div>
         </div>
         <div style="display:flex; flex-direction:column; gap:10px;">
             <div class="ctrl-btn" style="background:blue;" ontouchstart="socket.emit('specialPower')">B</div>
@@ -57,11 +62,9 @@
 
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-            
-            // Panel Güncelleme
             let html = `<span>MOD: ${d.mode.toUpperCase()}</span>`;
             if(d.mode === 'zombi') html += `<span>DALGA: ${d.wave}</span>`;
-            if(d.mode === 'bayrak') html += `<span>SKOR: ${d.scores.red}-${d.scores.blue}</span>`;
+            if(d.mode === 'bayrak') html += `<span>SKOR: <b style="color:red">${d.scores.red}</b> - <b style="color:blue">${d.scores.blue}</b></span>`;
             document.getElementById('statsRow').innerHTML = html;
             document.getElementById('winner').innerText = d.winner ? "KAZANAN: " + d.winner : "";
 
@@ -83,7 +86,14 @@
             d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
 
-        document.addEventListener('touchstart', e => { if(e.touches.length>1) e.preventDefault(); }, {passive:false});
+        // ZOOM KİLİDİ: Çift dokunmayı ve çoklu parmağı her yerde engelle
+        document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
+        let lastT = 0;
+        document.addEventListener('touchend', e => {
+            let now = Date.now();
+            if(now - lastT <= 300) e.preventDefault();
+            lastT = now;
+        }, false);
     </script>
 </body>
 </html>
