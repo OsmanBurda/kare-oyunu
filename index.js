@@ -13,9 +13,9 @@ io.on('connection', (socket) => {
         const rName = data.roomName || "OsmanOda";
         rooms[rName] = { 
             players: {}, bullets: [], zombies: [], mode: data.mode, 
-            status: 'playing', // Hemen başlasın diye düzelttim
+            status: 'playing', wave: 1, lastWaveTime: Date.now(),
             flags: { red: {x: 20, y: 20}, blue: {x: 360, y: 360} },
-            scores: { red: 0, blue: 0 }
+            scores: { red: 0, blue: 0 }, winner: null
         };
         joinProcess(socket, rName, data.userName);
     });
@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
         r.players[socket.id] = { 
             x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
             name: uName || "Osman", color: team, team: team,
-            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+            hp: hpVal, maxHp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
         };
         socket.emit('joined');
     }
@@ -36,14 +36,14 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
-            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
+        if(p && p.hp > 0 && Date.now() - p.lastBlast > 5000) { 
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
             p.lastBlast = Date.now();
         }
     });
 
     socket.on('fire', () => {
-        let r = rooms[socket.roomName]; if(!r || r.mode === 'bayrak') return;
+        let r = rooms[socket.roomName]; if(!r || (r.mode === 'bayrak' && r.status !== 'finished')) return;
         let p = r.players[socket.id];
         let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
@@ -53,7 +53,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('move', (dir) => {
-        let r = rooms[socket.roomName]; if(!r) return;
+        let r = rooms[socket.roomName]; if(!r || r.winner) return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
         let s = 20;
         if (dir === 'up' && p.y > 0) p.y -= s;
@@ -69,7 +69,7 @@ io.on('connection', (socket) => {
             let mf = r.flags[p.team];
             if(p.hasFlag && Math.hypot(p.x - mf.x, p.y - mf.y) < 30) {
                 r.scores[p.team]++; p.hasFlag = false;
-                if(r.scores[p.team] >= 3) { r.scores = {red:0, blue:0}; } // Maç sıfırlansın
+                if(r.scores[p.team] >= 3) r.winner = p.team.toUpperCase();
             }
         }
     });
@@ -78,12 +78,16 @@ io.on('connection', (socket) => {
 setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n];
-        if(r.mode === 'zombi') {
-            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0, hp: 2});
+        if(r.mode === 'zombi' && !r.winner) {
+            // Dalga Sistemi (Her 30 sn'de bir zorlaşır)
+            if(Date.now() - r.lastWaveTime > 30000) { r.wave++; r.lastWaveTime = Date.now(); }
+            if(r.zombies.length < 5 + r.wave) r.zombies.push({x: Math.random()*375, y: 0, hp: 1 + r.wave});
+            
             r.zombies.forEach((z, zi) => {
                 let targets = Object.values(r.players).filter(p => p.hp > 0);
                 if(targets[0]) {
-                    z.x += (z.x < targets[0].x ? 0.8 : -0.8); z.y += (z.y < targets[0].y ? 0.8 : -0.8);
+                    let spd = 0.6 + (r.wave * 0.1);
+                    z.x += (z.x < targets[0].x ? spd : -spd); z.y += (z.y < targets[0].y ? spd : -spd);
                     if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05;
                 }
                 r.bullets.forEach((b, bi) => {
@@ -93,10 +97,21 @@ setInterval(() => {
                     }
                 });
             });
+            if(Object.values(r.players).every(p => p.hp <= 0)) r.winner = "ZOMBİLER";
         }
         r.bullets.forEach((b, i) => {
             if(b.dir==='up') b.y-=15; else if(b.dir==='down') b.y+=15; else if(b.dir==='left') b.x-=15; else if(b.dir==='right') b.x+=15;
             if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(i, 1);
+            for(let id in r.players) {
+                let t = r.players[id];
+                if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
+                    t.hp -= 1; r.bullets.splice(i, 1);
+                    if(r.mode === 'savas' && t.hp <= 0) {
+                         let survivors = Object.values(r.players).filter(p => p.hp > 0);
+                         if(survivors.length === 1) r.winner = survivors[0].name;
+                    }
+                }
+            }
         });
         io.to(n).emit('state', r);
     }
