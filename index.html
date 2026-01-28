@@ -4,43 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        * { 
-            touch-action: none !important; 
-            -webkit-user-select: none !important; 
-            user-select: none !important;
-            -webkit-tap-highlight-color: transparent;
-        }
+        /* SCROLL VE ZOOM KİLİDİ */
+        * { touch-action: none !important; -webkit-user-select: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
+        html, body { position: fixed; width: 100%; height: 100%; overflow: hidden; background: #000; margin: 0; padding: 0; }
         
-        html, body { 
-            position: fixed; 
-            width: 100%; height: 100%; 
-            overflow: hidden; 
-            background: #000; margin: 0; padding: 0; 
-        }
-
-        #ui-header { display: flex; justify-content: space-between; padding: 10px 20px; color: #4CAF50; font-weight: bold; }
+        #ui-header { display: flex; justify-content: space-between; padding: 10px 20px; color: #4CAF50; font-weight: bold; font-family: sans-serif; }
         canvas { border: 3px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 0 auto; border-radius: 12px; }
-        #wave-bar { background: #222; color: white; width: 300px; margin: 8px auto; padding: 10px; text-align: center; border-radius: 10px; font-weight: bold; }
+        #wave-bar { background: #222; color: white; width: 300px; margin: 8px auto; padding: 10px; text-align: center; border-radius: 10px; font-weight: bold; font-family: sans-serif; }
 
         .controls { position: absolute; bottom: 25px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
         .dpad { display: grid; grid-template-areas: ". u ." "l . r" ". d ."; gap: 12px; }
         .btn { width: 62px; height: 62px; background: rgba(255,255,255,0.1); border-radius: 50%; border: 2px solid #444; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; }
         .action-group { display: flex; flex-direction: column; gap: 15px; align-items: center; }
-        .btn-b { background: #1a237e !important; }
+        .btn-b { background: #1a237e !important; font-weight: bold; }
         .btn-fire { background: #b71c1c !important; width: 80px; height: 80px; font-size: 32px; }
 
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: sans-serif; }
+        select, button#startBtn { padding: 15px; margin: 10px; width: 200px; border-radius: 10px; font-size: 18px; font-weight: bold; }
     </style>
 </head>
 <body oncontextmenu="return false;">
     <div id="gameOverlay" class="overlay">
         <h1>OSMAN OYUN</h1>
-        <button style="padding:15px 40px; background:#4CAF50; border:none; color:white; border-radius:10px; font-weight:bold;" onclick="startGame()">BAŞLA</button>
+        <select id="modeSelect">
+            <option value="zombi">ZOMBİ MODU</option>
+            <option value="savas">SAVAŞ MODU (3 CAN)</option>
+            <option value="bayrak">BAYRAK MODU</option>
+        </select>
+        <button id="startBtn" style="background:#4CAF50; color:white; border:none;" onclick="startGame()">BAŞLA</button>
     </div>
 
-    <div id="ui-header"><span id="hp">CAN: -</span><span id="modeText">MOD: ZOMBI</span></div>
+    <div id="ui-header"><span id="hp">CAN: -</span><span id="modeDisplay">MOD: -</span></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div id="wave-bar">DALGA: 1</div>
+    <div id="wave-bar">SKOR / DALGA</div>
 
     <div class="controls">
         <div class="dpad">
@@ -60,34 +56,61 @@
         const socket = io();
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        let blast = null;
 
-        // DOUBLE-TAP ZOOM ENGELLEYİCİ
+        // --- DOUBLE-TAP ZOOM KESİN ENGEL ---
         let lastTouchEnd = 0;
-        document.addEventListener('touchend', (e) => {
+        document.addEventListener('touchend', e => {
             let now = (new Date()).getTime();
             if (now - lastTouchEnd <= 300) e.preventDefault();
             lastTouchEnd = now;
         }, false);
-
-        document.addEventListener('touchstart', (e) => {
-            if (e.touches.length > 1) e.preventDefault();
-        }, { passive: false });
+        document.addEventListener('touchstart', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
 
         function startGame() {
-            socket.emit('createRoom', { mode: 'zombi' });
+            const m = document.getElementById('modeSelect').value;
+            socket.emit('createRoom', { mode: m });
             document.getElementById('gameOverlay').style.display = 'none';
         }
 
+        socket.on('blastEffect', d => { blast = { ...d, r: 0 }; });
+
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400);
+
+            // Bayraklar
+            if(r.mode === 'bayrak') {
+                ctx.fillStyle = "red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 25, 25);
+                ctx.fillStyle = "blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 25, 25);
+            }
+
+            // Alan Hasarı Efekti (Mavi Halka)
+            if(blast) {
+                ctx.beginPath(); ctx.arc(blast.x, blast.y, blast.r, 0, Math.PI*2);
+                ctx.strokeStyle = `rgba(0, 150, 255, ${1 - blast.r/80})`;
+                ctx.lineWidth = 4; ctx.stroke();
+                blast.r += 8; if(blast.r > 80) blast = null;
+            }
+
+            // Oyuncular
             Object.values(r.players).forEach(p => {
                 if(p.hp > 0) {
                     ctx.fillStyle = p.team === 'red' ? 'red' : 'blue';
                     ctx.fillRect(p.x, p.y, 25, 25);
-                    document.getElementById('hp').innerText = `CAN: ${Math.ceil(p.hp)}`;
+                    if(p.hasFlag) { ctx.strokeStyle = "yellow"; ctx.lineWidth = 3; ctx.strokeRect(p.x-2, p.y-2, 29, 29); }
                 }
             });
-            r.zombies.forEach(z => { ctx.fillStyle = '#2ecc71'; ctx.fillRect(z.x, z.y, 22, 22); });
+
+            // Zombiler ve Mermiler
+            r.zombies.forEach(z => { ctx.fillStyle = '#2ecc71'; ctx.fillRect(z.x, z.y, 20, 20); });
+            r.bullets.forEach(b => { ctx.fillStyle = 'orange'; ctx.fillRect(b.x, b.y, 8, 8); });
+
+            // UI Güncelleme
+            document.getElementById('hp').innerText = `CAN: ${Math.ceil(Object.values(r.players)[0]?.hp || 0)}`;
+            document.getElementById('modeDisplay').innerText = `MOD: ${r.mode.toUpperCase()}`;
+            document.getElementById('wave-bar').innerText = r.mode === 'bayrak' ? `SKOR: RED ${r.scores.red} - BLUE ${r.scores.blue}` : `DALGA: ${r.wave}`;
+            
+            if(r.winner) { alert("KAZANAN: " + r.winner.toUpperCase()); location.reload(); }
         });
     </script>
 </body>
