@@ -9,46 +9,67 @@
         .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; cursor: pointer; }
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); width: 220px; margin: 5px auto; gap: 8px; }
-        .ctrl-btn { padding: 18px; background: #444; border-radius: 12px; color: white; border: none; font-weight: bold; cursor: pointer; }
+        .ctrl-btn { padding: 18px; background: #444; border-radius: 12px; color: white; border: none; font-weight: bold; cursor: pointer; font-size: 20px; }
     </style>
 </head>
 <body>
     <div id="gameOverlay" class="overlay">
         <h2>KARE OYUNLARI</h2>
-        <input type="text" id="nameInput" placeholder="İsim..." style="padding:10px; width:220px; margin:5px; border-radius:8px;">
-        <input type="text" id="roomNameInput" placeholder="Oda Adı" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
+        <input type="text" id="nameInput" placeholder="İsim..." style="padding:10px; width:220px; margin:5px; border-radius:8px; border:none;">
+        <input type="text" id="roomNameInput" placeholder="Oda Adı" style="padding:10px; width:220px; margin:5px; border-radius:8px; border:none;">
         <select id="modeSelect" style="padding:10px; width:220px; margin:5px; border-radius:8px;"><option value="zombi">Zombi</option><option value="savas">Savaş</option><option value="labirent">Labirent</option></select>
         <button class="btn" onclick="createRoom()">ODA KUR</button>
     </div>
     <div id="lobby" class="overlay" style="display:none;"><h3>Lobi</h3><div id="playerList"></div><button class="btn" id="sBtn" style="display:none;" onclick="socket.emit('startGameSignal')">BAŞLAT</button></div>
-    <div id="status" style="color:#FFD700; font-weight:bold; height: 25px;">...</div>
+    
+    <div id="status" style="color:#FFD700; font-weight:bold; height: 25px; margin-top:5px;">...</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
+    
     <div class="controls">
         <button class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</button>
         <button class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</button>
         <button class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</button>
         <button class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</button>
-        <button class="ctrl-btn" style="background:red;" ontouchstart="socket.emit('fire')">ATEŞ</button>
+        <button class="ctrl-btn" style="background:#ff4444;" ontouchstart="socket.emit('fire')">ATEŞ</button>
         <button class="ctrl-btn" style="background:#ff9800;" ontouchstart="socket.emit('specialPower')">B</button>
     </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+        
         function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
+        
         socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
         socket.on('updatePlayerList', d => { document.getElementById('playerList').innerHTML = d.players.map(p => `<div>• ${p.name}</div>`).join(""); });
         socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
         socket.on('winner', m => { alert(m); location.reload(); });
+        
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            (d.bullets||[]).forEach(b=>{ctx.fillStyle="#FFFF00"; ctx.fillRect(b.x,b.y,8,8); ctx.strokeStyle="white"; ctx.strokeRect(b.x,b.y,8,8);});
+            
+            // SARI MERMİLER
+            (d.bullets||[]).forEach(b=>{
+                ctx.fillStyle="#FFFF00"; ctx.fillRect(b.x,b.y,8,8); 
+                ctx.strokeStyle="white"; ctx.lineWidth=1; ctx.strokeRect(b.x,b.y,8,8);
+            });
+            
             (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
+            
             for(let id in d.players){ 
                 let p = d.players[id]; if(p.hp > 0) { 
                     ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); 
                     if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi' ? `Dalga: ${d.wave} | Can: ${Math.ceil(p.hp)}` : `Can: ${p.hp}`);
                 } 
             }
+        });
+
+        // Klavye desteği (B tuşu dahil)
+        window.addEventListener('keydown', e => {
+            const keys = { w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+            if(keys[e.key]) socket.emit('move', keys[e.key]);
+            if(e.code === 'Space') socket.emit('fire');
+            if(e.key.toLowerCase() === 'b') socket.emit('specialPower');
         });
     </script>
 </body>
