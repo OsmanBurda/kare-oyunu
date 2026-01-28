@@ -4,11 +4,10 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http);
 const path = require('path');
 
-// Beyaz ekran hatasını çözmek için dosya yolunu sabitledik
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 let rooms = {};
@@ -23,7 +22,7 @@ io.on('connection', (socket) => {
     function joinProcess(socket, rName, uName) {
         socket.join(rName);
         socket.roomName = rName;
-        rooms[rName].players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: 'deeppink', hp: 10, lastSpecial: 0 };
+        rooms[rName].players[socket.id] = { id: socket.id, x: 185, y: 185, hp: 10, lastSpecial: 0, color: 'deeppink' };
         socket.emit('joined');
     }
 
@@ -34,7 +33,6 @@ io.on('connection', (socket) => {
         if(p && Date.now() - p.lastSpecial > 15000) { 
             p.lastSpecial = Date.now();
             io.to(socket.roomName).emit('specialEffect', {x: p.x + 12, y: p.y + 12});
-            // ALAN HASARI KİLİDİ: TAM 80 BİRİM
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 80);
         }
     });
@@ -44,21 +42,20 @@ io.on('connection', (socket) => {
         if(p) {
             if (dir === 'up') p.y -= 20; if (dir === 'down') p.y += 20;
             if (dir === 'left') p.x -= 20; if (dir === 'right') p.x += 20;
-            p.x = Math.max(0, Math.min(375, p.x));
-            p.y = Math.max(0, Math.min(375, p.y));
+            p.x = Math.max(0, Math.min(375, p.x)); p.y = Math.max(0, Math.min(375, p.y));
         }
     });
 
     setInterval(() => {
         for(let n in rooms) {
             let r = rooms[n];
-            // ZOMBİ HIZI KİLİDİ: 0.4 (VİDEODAKİ GİBİ)
             r.zombies.forEach(z => {
-                let targets = Object.values(r.players).filter(p => p.hp > 0);
-                if(targets[0]) {
-                    z.x += (z.x < targets[0].x ? 0.4 : -0.4);
-                    z.y += (z.y < targets[0].y ? 0.4 : -0.4);
-                    if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.05;
+                let target = Object.values(r.players)[0];
+                if(target) {
+                    // ZOMBİ HIZI 0.5 OLARAK GÜNCELLENDİ VE KİLİTLENDİ
+                    z.x += (z.x < target.x ? 0.5 : -0.5);
+                    z.y += (z.y < target.y ? 0.5 : -0.5);
+                    if(Math.hypot(z.x - target.x, z.y - target.y) < 20) target.hp -= 0.05;
                 }
             });
             if(r.zombies.length < r.wave + 3) r.zombies.push({x: Math.random()*380, y: 0});
@@ -67,5 +64,4 @@ io.on('connection', (socket) => {
     }, 50);
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log("Sunucu hazır!"));
+http.listen(process.env.PORT || 3000);
