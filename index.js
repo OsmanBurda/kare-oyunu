@@ -31,13 +31,17 @@ io.on('connection', (socket) => {
         let r = rooms[rName];
         let team = (r.mode === 'bayrak' || r.mode === 'vs') ? (Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue') : 'solo';
         
+        // CAN AYARLARI: Savaş 3, Zombi 10, Bayrak 1
+        let initialHP = 1;
+        if(r.mode === 'vs') initialHP = 3;
+        if(r.mode === 'zombi') initialHP = 10;
+
         socket.join(rName);
         socket.roomName = rName;
-        // HAFIZA: 1 HP kuralı uygulandı
         r.players[socket.id] = { 
-            id: socket.id, x: (team==='red'?40:340), y: 190, hp: 1, 
+            id: socket.id, x: (team==='red'?40:340), y: 190, hp: initialHP, maxHP: initialHP,
             name: data.userName || "Osman", color: (team === 'red' ? 'red' : 'blue'), 
-            team: team, hasFlag: false, lastFire: 0, lastDir: 'up', lastSpecial: 0
+            team: team, hasFlag: false, lastFire: 0, lastDir: 'up', lastSpecial: 0, lastHit: 0
         };
         socket.emit('joined', { mode: r.mode, room: rName, isHost: (r.host === socket.id) });
         sendLobby();
@@ -48,15 +52,11 @@ io.on('connection', (socket) => {
         if(r && r.host === socket.id) { r.started = true; io.to(socket.roomName).emit('gameStarted'); sendLobby(); }
     });
 
-    // HAFIZA: 'B' Tuşu Özel Gücü (Zombi modunda etraftakileri yok eder)
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
         if(p && p.hp > 0 && r.started && Date.now() - p.lastSpecial > 15000) {
             p.lastSpecial = Date.now();
-            if(r.mode === 'zombi') {
-                // 80 birim yakındaki tüm zombileri temizler
-                r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 80);
-            }
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 80);
             io.to(socket.roomName).emit('specialEffect', { x: p.x + 12, y: p.y + 12 });
         }
     });
@@ -77,11 +77,10 @@ io.on('connection', (socket) => {
 
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        // HAFIZA: 1 saniye cooldown ve Bayrak modunda 4-yön ateş
         if(p && p.hp > 0 && r.started && Date.now() - p.lastFire > 1000) {
             p.lastFire = Date.now();
             let bDirs = r.mode === 'bayrak' ? [[0,-8],[0,8],[-8,0],[8,0]] : [{up:[0,-8],down:[0,8],left:[-8,0],right:[8,0]}[p.lastDir]];
-            if(bDirs[0]) bDirs.forEach(v => r.bullets.push({x: p.x+10, y: p.y+10, dx: v[0], dy: v[1], owner: socket.id}));
+            if(bDirs && bDirs[0]) bDirs.forEach(v => r.bullets.push({x: p.x+10, y: p.y+10, dx: v[0], dy: v[1], owner: socket.id}));
         }
     });
 
@@ -97,10 +96,9 @@ io.on('connection', (socket) => {
                         if(Math.hypot(b.x - z.x, b.y - z.y) < 25) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); }
                     });
                 }
-                // VS modunda mermi oyuncuya değerse
                 if(r.mode === 'vs' || r.mode === 'bayrak') {
                     Object.values(r.players).forEach(p => {
-                        if(p.id !== b.owner && Math.hypot(b.x - p.x, b.y - p.y) < 20) { p.hp = 0; r.bullets.splice(bi, 1); }
+                        if(p.id !== b.owner && Math.hypot(b.x - p.x, b.y - p.y) < 20) { p.hp -= 1; r.bullets.splice(bi, 1); }
                     });
                 }
                 if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
@@ -115,9 +113,10 @@ io.on('connection', (socket) => {
                     let targets = Object.values(r.players).filter(pl => pl.hp > 0);
                     if(targets.length > 0) {
                         let t = targets[0];
-                        // HAFIZA: Zombi hızı 0.5
                         z.x += (z.x < t.x ? 0.5 : -0.5); z.y += (z.y < t.y ? 0.5 : -0.5);
-                        if(Math.hypot(z.x-t.x, z.y-t.y) < 20) t.hp = 0; // Tek vuruşta ölür (1 HP)
+                        if(Math.hypot(z.x-t.x, z.y-t.y) < 20 && Date.now() - t.lastHit > 1000) {
+                            t.hp -= 1; t.lastHit = Date.now();
+                        }
                     }
                 });
             }
@@ -138,8 +137,12 @@ io.on('connection', (socket) => {
 
             Object.values(r.players).forEach(p => {
                 if(p.hp <= 0) {
-                    if(r.mode === 'zombi') { io.to(n).emit('gameOver', { msg: "Zombiler kazandı!" }); delete rooms[n]; }
-                    else { p.hp = 1; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag=false; }
+                    if(r.mode === 'zombi') { io.to(n).emit('gameOver', { msg: "Öldün! Zombiler kazandı." }); delete rooms[n]; }
+                    else { 
+                        p.hp = p.maxHP; // VS ve Bayrak modunda respawn
+                        p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag=false;
+                        if(r.mode === 'bayrak') { /* Bayrak modunda ölürse karşı takımın bayrağını bırakır */ }
+                    }
                 }
             });
             io.to(n).emit('state', r);
