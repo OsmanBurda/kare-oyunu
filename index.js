@@ -11,21 +11,18 @@ let rooms = {};
 const mazeWalls = [{ x: 0, y: 300, w: 300, h: 15 }, { x: 100, y: 200, w: 300, h: 15 }, { x: 0, y: 100, w: 300, h: 15 }];
 
 io.on('connection', (socket) => {
-    // Bağlanan herkese mevcut odaları gönder
     socket.emit('roomList', Object.keys(rooms).filter(r => rooms[r].status === 'lobby'));
 
     socket.on('createRoom', (data) => {
         const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
-        if (rooms[rName]) return; // Aynı isimde oda varsa kurma
+        if (rooms[rName]) return;
         rooms[rName] = { players: {}, bullets: [], zombies: [], mode: data.mode, status: 'lobby', leader: socket.id, wave: 1 };
         joinProcess(socket, rName, data.userName);
         io.emit('roomList', Object.keys(rooms).filter(r => rooms[r].status === 'lobby'));
     });
 
     socket.on('joinExistingRoom', (data) => {
-        if (rooms[data.roomName] && rooms[data.roomName].status === 'lobby') {
-            joinProcess(socket, data.roomName, data.userName);
-        }
+        if (rooms[data.roomName] && rooms[data.roomName].status === 'lobby') joinProcess(socket, data.roomName, data.userName);
     });
 
     function joinProcess(socket, rName, uName) {
@@ -37,7 +34,28 @@ io.on('connection', (socket) => {
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players)});
     }
 
-    // ... (Ateş, Hareket ve Zombi mantığı önceki kodla aynı, değişmedi)
+    socket.on('specialPower', () => {
+        let r = rooms[socket.roomName]; 
+        if(!r || r.mode === 'savas' || r.mode === 'labirent') return; 
+        let p = r.players[socket.id];
+        // BEKLEME SÜRESİ AZALTILDI: 5 saniyeden 1 saniyeye
+        if(p && p.hp > 0 && Date.now() - p.lastSpecial > 1000) { 
+            p.lastSpecial = Date.now();
+            io.to(socket.roomName).emit('specialEffect', {x: p.x + 12, y: p.y + 12});
+            // MENZİL ARTIRILDI: 120 -> 160
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 160);
+        }
+    });
+
+    socket.on('move', (dir) => {
+        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
+        let nX = p.x, nY = p.y;
+        if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20; if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
+        let walls = (r.mode === 'labirent' ? mazeWalls : []);
+        if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
+    });
+
     socket.on('startGameSignal', () => {
         let r = rooms[socket.roomName];
         if(r && r.leader === socket.id) {
@@ -49,26 +67,6 @@ io.on('connection', (socket) => {
                 else { p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350); p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350); }
             }
             io.to(socket.roomName).emit('gameStarted');
-        }
-    });
-
-    socket.on('move', (dir) => {
-        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
-        let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
-        let nX = p.x, nY = p.y;
-        if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20; if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
-        let walls = (r.mode === 'labirent' ? mazeWalls : []);
-        if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
-        if(r.mode === 'labirent' && p.y < 40 && p.x < 40) io.to(socket.roomName).emit('winner', p.name + " Labirenti Çözdü!");
-    });
-
-    socket.on('fire', () => {
-        let r = rooms[socket.roomName]; if(!r || r.mode === 'labirent') return; 
-        let p = r.players[socket.id];
-        let rate = (r.mode === 'savas' ? 1000 : 200);
-        if(p && p.hp > 0 && Date.now() - p.lastFire > rate) { 
-            r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id }); 
-            p.lastFire = Date.now(); 
         }
     });
 
@@ -89,8 +87,9 @@ io.on('connection', (socket) => {
                 r.zombies.forEach(z => { 
                     let targets = Object.values(r.players).filter(p => p.hp > 0); 
                     if(targets.length > 0) { 
-                        z.x += (z.x < targets[0].x ? 0.4 : -0.4); 
-                        z.y += (z.y < targets[0].y ? 0.4 : -0.4); 
+                        // ZOMBİ HIZI DAHA DA DÜŞÜRÜLDÜ: 0.4 -> 0.25
+                        z.x += (z.x < targets[0].x ? 0.25 : -0.25); 
+                        z.y += (z.y < targets[0].y ? 0.25 : -0.25); 
                         if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1; 
                     } 
                 });
