@@ -45,7 +45,15 @@ io.on('connection', (socket) => {
         let r = rooms[socket.roomName];
         if(r && r.leader === socket.id) {
             r.status = 'playing';
-            for(let id in r.players) { let p = r.players[id]; p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350); p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350); }
+            for(let id in r.players) { 
+                let p = r.players[id]; 
+                if(r.mode === 'zombi') {
+                    p.x = 185; p.y = 185; // Zombi modunda herkes merkezde doğar
+                } else {
+                    p.x = (r.mode === 'labirent' ? 20 : 20 + Math.random()*350); 
+                    p.y = (r.mode === 'labirent' ? 350 : 20 + Math.random()*350); 
+                }
+            }
             io.to(socket.roomName).emit('gameStarted');
         }
     });
@@ -75,17 +83,27 @@ io.on('connection', (socket) => {
         for(let n in rooms) {
             let r = rooms[n]; if(r.status !== 'playing') continue;
             if(r.mode === 'zombi') {
-                if(r.zombies.length === 0) r.wave++; if(r.zombies.length < r.wave + 2) r.zombies.push({x: Math.random()*380, y: 10});
+                if(r.zombies.length === 0) r.wave++; 
+                if(r.zombies.length < r.wave + 2) {
+                    // KENARLARDA DOĞMA MANTIĞI
+                    let side = Math.floor(Math.random() * 4);
+                    let zX, zY;
+                    if(side === 0) { zX = Math.random() * 380; zY = 0; } // Üst
+                    else if(side === 1) { zX = Math.random() * 380; zY = 380; } // Alt
+                    else if(side === 2) { zX = 0; zY = Math.random() * 380; } // Sol
+                    else { zX = 380; zY = Math.random() * 380; } // Sağ
+                    r.zombies.push({x: zX, y: zY});
+                }
                 r.zombies.forEach(z => { 
                     let targets = Object.values(r.players).filter(p => p.hp > 0); 
                     if(targets.length > 0) { 
-                        // ZOMBİ HIZI DÜŞÜRÜLDÜ: 0.7 -> 0.4
                         z.x += (z.x < targets[0].x ? 0.4 : -0.4); 
                         z.y += (z.y < targets[0].y ? 0.4 : -0.4); 
                         if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1; 
                     } 
                 });
             }
+            // Mermi hareketleri... (aynı kalıyor)
             r.bullets.forEach((b, bi) => {
                 b.x += (b.dir==='left'?-15:(b.dir==='right'?15:0)); b.y += (b.dir==='up'?-15:(b.dir==='down'?15:0));
                 if(r.mode === 'zombi') r.zombies.forEach((z, zi) => { if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); } });
