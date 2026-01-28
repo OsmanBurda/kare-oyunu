@@ -38,6 +38,7 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
+        // B GÜCÜ (Resimdeki sarı halka menzili: 80 birim)
         if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - (p.x+12), z.y - (p.y+12)) > 80);
             io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12, range: 80});
@@ -68,15 +69,6 @@ io.on('connection', (socket) => {
         if (dir === 'left' && p.x > 0) p.x -= s;
         if (dir === 'right' && p.x < 375) p.x += s;
         p.lastDir = dir;
-
-        if(r.mode === 'bayrak') {
-            let enemyTeam = p.team === 'red' ? 'blue' : 'red';
-            if(!p.hasFlag && Math.hypot(p.x - r.flags[enemyTeam].x, p.y - r.flags[enemyTeam].y) < 30) p.hasFlag = true;
-            if(p.hasFlag && Math.hypot(p.x - r.flags[p.team].x, p.y - r.flags[p.team].y) < 30) {
-                r.scores[p.team]++; p.hasFlag = false;
-                if(r.scores[p.team] >= 3) r.winner = p.team;
-            }
-        }
     });
 });
 
@@ -84,7 +76,6 @@ setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n];
         if(r.mode === 'zombi' && r.zombies.length < 8) r.zombies.push({x: Math.random()*370, y: 0});
-        
         r.zombies.forEach(z => {
             let targets = Object.values(r.players).filter(p => p.hp > 0);
             if(targets[0]) {
@@ -92,14 +83,12 @@ setInterval(() => {
                 if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.1;
             }
         });
-
         r.bullets.forEach((b, bi) => {
             if(b.dir==='up') b.y-=15; else if(b.dir==='down') b.y+=15; else if(b.dir==='left') b.x-=15; else if(b.dir==='right') b.x+=15;
             for(let id in r.players) {
                 let t = r.players[id];
                 if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
                     t.hp -= 1; r.bullets.splice(bi, 1);
-                    if(t.hasFlag) t.hasFlag = false;
                 }
             }
             if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
