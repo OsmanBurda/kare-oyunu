@@ -22,7 +22,7 @@
         <div class="help-panel">
             <b>KURALLAR:</b><br>
             • <b>Savaş:</b> Herkes birbirini vursun, 3 canın var!<br>
-            • <b>Zombi:</b> Dalgalardan kurtul, özel gücünü (B) kullan!<br>
+            • <b>Zombi:</b> Yavaşlatılmış zombileri temizle, B ile patlat!<br>
             • <b>Labirent:</b> Savaş yok, sadece çıkıştaki 🏆'ya ulaş!
         </div>
         <input type="text" id="nameInput" placeholder="İsim..." style="padding:10px; width:220px; margin:5px; border-radius:8px;">
@@ -56,7 +56,6 @@
         socket.on('joined', d => { 
             gameMode = d.mode; document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; 
             if(d.isLeader) document.getElementById('sBtn').style.display='block';
-            // LABİRENTTE BUTONLARI GİZLE
             document.getElementById('fireBtn').style.display = (gameMode === 'labirent' ? 'none' : 'flex');
             document.getElementById('specialBtn').style.display = (gameMode === 'labirent' || gameMode === 'savas' ? 'none' : 'flex');
         });
@@ -67,14 +66,11 @@
 
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            
-            // KAZANMA BÖLGESİ (ALTIN KUPA/YILDIZ)
             if(d.mode === 'labirent') {
                 ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(20, 20, 15, 0, Math.PI*2); ctx.fill();
                 ctx.strokeStyle = "white"; ctx.lineWidth = 3; ctx.stroke();
                 ctx.fillStyle = "black"; ctx.font = "15px Arial"; ctx.fillText("🏆", 10, 25);
             }
-
             if(currentEffect) { ctx.beginPath(); ctx.arc(currentEffect.x, currentEffect.y, currentEffect.r, 0, Math.PI*2); ctx.strokeStyle = "rgba(0, 191, 255, 0.8)"; ctx.lineWidth = 5; ctx.stroke(); ctx.fillStyle = "rgba(0, 191, 255, 0.2)"; ctx.fill(); }
             (d.bullets||[]).forEach(b=>{ ctx.fillStyle="#FFD700"; ctx.fillRect(b.x,b.y,12,12); ctx.strokeStyle="black"; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,12,12); });
             (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
