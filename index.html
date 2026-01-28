@@ -1,53 +1,78 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; overflow: hidden; }
-        canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 5px auto; width: 320px; height: 320px; }
-        .ctrl-btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; margin: 2px; border-radius: 10px; }
-        .special-btn { background: #ff9800 !important; width: 80px; font-weight: bold; }
+        * { touch-action: none; -webkit-tap-highlight-color: transparent; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; }
+        canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 10px auto; width: 320px; height: 320px; border-radius: 8px; }
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .row { display: flex; gap: 10px; }
+        .btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; border-radius: 10px; }
+        .special-btn { background: #ff9800 !important; width: 80px; font-weight: bold; color: black; border: 2px solid white; }
+        #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
     </style>
 </head>
 <body>
     <div id="menu">
-        <input type="text" id="name" placeholder="İsim">
-        <button onclick="socket.emit('createRoom', {userName: document.getElementById('name').value, mode: 'zombi'})">BAŞLA</button>
+        <h2 style="color:#4CAF50">ZOMBİ KARE</h2>
+        <input type="text" id="name" placeholder="İsim" style="padding:10px; border-radius:5px; border:none;">
+        <br>
+        <button onclick="start()" style="padding:10px 40px; background:#4CAF50; color:white; border:none; border-radius:5px; font-weight:bold;">BAŞLA</button>
     </div>
-    <div id="status"></div>
+
+    <div id="ui" style="margin-top:10px; font-weight:bold; color:#FFD700;">
+        Dalga: <span id="wave">1</span> | Can: <span id="hp">10</span>
+    </div>
+    
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div class="row">
-        <button class="ctrl-btn" onpointerdown="socket.emit('move','up')">▲</button>
+
+    <div class="controls">
+        <div class="row"><button class="btn" onpointerdown="socket.emit('move','up')">▲</button></div>
+        <div class="row">
+            <button class="btn" onpointerdown="socket.emit('move','left')">◀</button>
+            <button class="btn" onpointerdown="socket.emit('move','down')">▼</button>
+            <button class="btn" onpointerdown="socket.emit('move','right')">▶</button>
+        </div>
+        <button class="btn special-btn" onpointerdown="socket.emit('specialPower')">B</button>
     </div>
-    <div class="row">
-        <button class="ctrl-btn" onpointerdown="socket.emit('move','left')">◀</button>
-        <button class="ctrl-btn" onpointerdown="socket.emit('move','down')">▼</button>
-        <button class="ctrl-btn" onpointerdown="socket.emit('move','right')">▶</button>
-    </div>
-    <button class="ctrl-btn special-btn" onpointerdown="socket.emit('specialPower')">B</button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io(); const ctx = document.getElementById('gameCanvas').getContext('2d');
+        const socket = io();
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
         let effect = null;
 
-        socket.on('joined', () => document.getElementById('menu').style.display='none');
+        function start() {
+            const name = document.getElementById('name').value;
+            socket.emit('createRoom', {userName: name, mode: 'zombi'});
+            document.getElementById('menu').style.display = 'none';
+        }
+
         socket.on('specialEffect', d => { 
             effect = {x: d.x, y: d.y, r: 0};
             let anim = setInterval(() => {
-                effect.r += 10;
-                if(effect.r > 80) { clearInterval(anim); effect = null; } // GÖRSEL KİLİT 80
+                effect.r += 8;
+                if(effect.r > 80) { clearInterval(anim); effect = null; } // ALAN KİLİDİ 80
             }, 20);
         });
 
         socket.on('state', d => {
-            ctx.clearRect(0,0,400,400);
-            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle="cyan"; ctx.stroke(); }
-            (d.zombies||[]).forEach(z => { ctx.fillStyle="green"; ctx.fillRect(z.x, z.y, 25, 25); });
+            ctx.clearRect(0, 0, 400, 400);
+            if(effect) {
+                ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2);
+                ctx.strokeStyle = "rgba(0, 255, 255, 0.8)"; ctx.lineWidth = 4; ctx.stroke();
+            }
+            (d.zombies || []).forEach(z => { ctx.fillStyle = "green"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in d.players) {
                 let p = d.players[id];
-                ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                if(id === socket.id) document.getElementById('status').innerText = "Can: " + Math.ceil(p.hp);
+                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                if(id === socket.id) {
+                    document.getElementById('hp').innerText = Math.ceil(p.hp);
+                    document.getElementById('wave').innerText = d.wave;
+                    if(p.hp <= 0) { alert("Öldün!"); location.reload(); }
+                }
             }
         });
     </script>
