@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
         r.players[socket.id] = { 
             x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
             name: uName || "Osman", color: team, team: team,
-            hp: hpVal, maxHp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
         };
         socket.emit('joined');
     }
@@ -36,7 +36,7 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        if(p && p.hp > 0 && Date.now() - p.lastBlast > 5000) { 
+        if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
             p.lastBlast = Date.now();
         }
@@ -47,7 +47,7 @@ io.on('connection', (socket) => {
         let p = r.players[socket.id];
         let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
-            // Bayrak modunda 4 yöne ateş özelliği eklendi
+            // Bayrak modunda 4 yöne ateş aktif
             if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
             } else {
@@ -85,7 +85,7 @@ setInterval(() => {
         let r = rooms[n];
         if(r.mode === 'zombi' && !r.winner) {
             if(Date.now() - r.lastWaveTime > 20000) { r.wave++; r.lastWaveTime = Date.now(); }
-            if(r.zombies.length < 3 + r.wave) r.zombies.push({x: Math.random()*375, y: 0, hp: 1});
+            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0, hp: 1});
             r.zombies.forEach((z) => {
                 let targets = Object.values(r.players).filter(p => p.hp > 0);
                 if(targets[0]) {
