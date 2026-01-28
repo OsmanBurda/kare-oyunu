@@ -6,33 +6,30 @@
         * { touch-action: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; }
         canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 5px auto; width: 320px; height: 320px; border-radius: 8px; }
-        .ui-panel { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 10px; }
         .move-grid { display: grid; grid-template-areas: ". up ." "left down right"; gap: 5px; }
-        .action-grid { display: flex; gap: 15px; margin-top: 5px; }
+        .action-grid { display: flex; gap: 15px; }
         .btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; border-radius: 12px; font-weight: bold; box-shadow: 0 4px #222; }
-        .btn:active { transform: translateY(2px); box-shadow: 0 2px #222; }
         .fire-btn { background: #f44336 !important; width: 90px; }
         .spec-btn { background: #ff9800 !important; width: 90px; }
         #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        input, select { padding: 12px; margin: 10px; width: 220px; border-radius: 8px; font-size: 16px; }
+        input, select { padding: 12px; margin: 10px; width: 220px; border-radius: 8px; }
     </style>
 </head>
 <body>
     <div id="menu">
-        <h2 style="color:#4CAF50">KARE SAVAŞLARI</h2>
-        <input type="text" id="name" placeholder="Oyuncu Adı">
+        <h2 style="color:#4CAF50">OSMAN'IN KARE OYUNU</h2>
+        <input type="text" id="name" placeholder="İsim">
         <select id="mode">
-            <option value="zombi">Zombi Modu (0.5 Hız)</option>
-            <option value="vs">Savaş Modu (3 Can)</option>
+            <option value="zombi">Zombi Modu</option>
+            <option value="vs">Savaş (VS)</option>
             <option value="bayrak">Bayrak Kapmaca</option>
         </select>
-        <button class="btn" onclick="start()" style="width:180px; background:#4CAF50">OYUNA GİR</button>
+        <button class="btn" onclick="start()" style="width:150px; background:#4CAF50">BAŞLA</button>
     </div>
-
-    <div id="status" style="font-weight:bold; color:#FFD700; padding: 5px;">Bağlanılıyor...</div>
+    <div id="status" style="font-weight:bold; color:#FFD700; height: 25px;"></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-
-    <div class="ui-panel">
+    <div class="controls">
         <div class="move-grid">
             <button class="btn" style="grid-area: up" onpointerdown="socket.emit('move','up')">▲</button>
             <button class="btn" style="grid-area: left" onpointerdown="socket.emit('move','left')">◀</button>
@@ -44,37 +41,23 @@
             <button class="btn spec-btn" onpointerdown="socket.emit('specialPower')">B</button>
         </div>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const ctx = document.getElementById('gameCanvas').getContext('2d');
         let effect = null;
-        function start() { 
-            socket.emit('createRoom', {userName: document.getElementById('name').value, mode: document.getElementById('mode').value});
-            document.getElementById('menu').style.display='none';
-        }
-
+        function start() { socket.emit('createRoom', {userName: document.getElementById('name').value, mode: document.getElementById('mode').value}); document.getElementById('menu').style.display='none'; }
         socket.on('specialEffect', d => { 
             effect = {x: d.x, y: d.y, r: 0, opacity: 1};
-            let anim = setInterval(() => {
-                effect.r += 10;
-                effect.opacity -= 0.1;
-                if(effect.r > 100) { clearInterval(anim); effect = null; }
-            }, 20);
+            let anim = setInterval(() => { effect.r += 10; effect.opacity -= 0.1; if(effect.r > 100) { clearInterval(anim); effect = null; } }, 20);
         });
-
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-            if(effect) { // Eski Güzel Vuruş Efekti (Parlayan Halka)
-                ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2);
-                ctx.strokeStyle=`rgba(255, 152, 0, ${effect.opacity})`; ctx.lineWidth=10; ctx.stroke();
-                ctx.strokeStyle=`rgba(255, 255, 255, ${effect.opacity})`; ctx.lineWidth=2; ctx.stroke();
-            }
-            (d.bullets||[]).forEach(b => { ctx.fillStyle="#ffeb3b"; ctx.fillRect(b.x,b.y,10,10); });
-            (d.zombies||[]).forEach(z => { ctx.fillStyle="#4caf50"; ctx.fillRect(z.x,z.y,25,25); });
+            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle=`rgba(0, 255, 255, ${effect.opacity})`; ctx.lineWidth=8; ctx.stroke(); }
+            (d.bullets||[]).forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,10,10); });
+            (d.zombies||[]).forEach(z => { ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25); });
             for(let id in d.players) {
                 let p = d.players[id]; ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25);
-                if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi' ? "Dalga: "+d.wave+" | " : "") + "Can: " + Math.ceil(p.hp);
+                if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi'?"Dalga: "+d.wave+" | ":"") + "Can: " + Math.ceil(p.hp);
             }
         });
     </script>
