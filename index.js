@@ -23,12 +23,13 @@ io.on('connection', (socket) => {
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
+        // KALICI HP AYARLARI
         let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
         let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
         r.players[socket.id] = { 
             x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
             name: uName || "Osman", color: team, team: team,
-            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+            hp: hpVal, maxHp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
         };
         socket.emit('joined');
     }
@@ -36,7 +37,8 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
+        // KALICI KURAL: B gücü sadece zombi modunda çalışır
+        if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
             io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12});
             p.lastBlast = Date.now();
@@ -46,7 +48,7 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        let cd = (r.mode === 'savas' ? 1000 : 250);
+        let cd = (r.mode === 'savas' ? 1000 : 250); // SAVAŞ MODU 1 SN COOLDOWN
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
             if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
