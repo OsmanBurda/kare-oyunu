@@ -3,10 +3,23 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
+        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
         body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; border-radius: 8px; }
-        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; padding: 0 10px; }
+        
+        /* Oyun Alanı */
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
+        
+        /* İşaretlediğin Boş Alan İçin Bilgi Paneli */
+        #infoPanel { 
+            width: 320px; height: 70px; background: rgba(255,255,255,0.05); 
+            margin: 5px auto; border-radius: 10px; border: 1px solid #333;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .info-row { display: flex; gap: 20px; font-size: 14px; font-weight: bold; }
+        #winnerLabel { color: #f1c40f; font-size: 18px; margin-top: 5px; text-transform: uppercase; }
+
+        /* Kontroller */
+        .controls { position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-around; align-items: center; }
         .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .btn { padding: 15px; background: #4CAF50; color: white; border: none; width: 220px; margin: 10px; font-weight: bold; border-radius: 10px; }
@@ -15,17 +28,26 @@
 <body>
     <div id="gameOverlay" class="overlay">
         <h2>OSMAN OYUN</h2>
-        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; border-radius:5px; border:none;">
+        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; border-radius:5px;">
         <select id="modeSelect" style="padding:10px; margin:10px; border-radius:5px;">
-            <option value="savas">SAVAŞ (3 HP)</option>
-            <option value="zombi">ZOMBİ (10 HP)</option>
+            <option value="savas">SAVAŞ MODU (3 HP)</option>
+            <option value="zombi">ZOMBİ MODU (10 HP)</option>
             <option value="bayrak">BAYRAK KAPMACA</option>
         </select>
         <button class="btn" onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})">BAŞLAT</button>
     </div>
 
-    <div id="status" style="margin-top:5px; font-weight:bold; color:#4CAF50;">Can: - | Skor: 0-0</div>
+    <div style="margin-top:5px; font-weight:bold; color:#4CAF50;" id="hpDisplay">Can: -</div>
+    
     <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <div id="infoPanel">
+        <div class="info-row" id="statsRow">
+            <span>MOD: -</span>
+            <span>SKOR: 0-0</span>
+        </div>
+        <div id="winnerLabel"></div>
+    </div>
 
     <div class="controls">
         <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:8px;">
@@ -34,9 +56,9 @@
             <div class="ctrl-btn" style="grid-area:d" ontouchstart="socket.emit('move','down')">▼</div>
             <div class="ctrl-btn" style="grid-area:r" ontouchstart="socket.emit('move','right')">▶</div>
         </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
             <div class="ctrl-btn" style="background:blue; width:55px; height:55px;" ontouchstart="socket.emit('specialPower')">B</div>
-            <div class="ctrl-btn" style="background:rgba(255,0,0,0.5); width:80px; height:80px;" ontouchstart="socket.emit('fire')">🔥</div>
+            <div class="ctrl-btn" style="background:rgba(255,0,0,0.6); width:85px; height:85px;" ontouchstart="socket.emit('fire')">🔥</div>
         </div>
     </div>
 
@@ -47,22 +69,34 @@
 
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
+            
+            // Bilgi Paneli Güncelleme
+            let statsHtml = `<span>MOD: ${d.mode.toUpperCase()}</span>`;
+            if(d.mode === 'zombi') statsHtml += `<span>DALGA: ${d.wave}</span>`;
+            else if(d.mode === 'bayrak') statsHtml += `<span>SKOR: <b style="color:red">${d.scores.red}</b> - <b style="color:blue">${d.scores.blue}</b></span>`;
+            document.getElementById('statsRow').innerHTML = statsHtml;
+            document.getElementById('winnerLabel').innerText = d.winner ? "KAZANAN: " + d.winner : "";
+
             if(d.mode === 'bayrak'){
                 ctx.fillStyle='red'; ctx.fillRect(d.flags.red.x, d.flags.red.y, 25, 25);
                 ctx.fillStyle='blue'; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 25, 25);
             }
+
             Object.values(d.players).forEach(p => {
                 if(p.hp > 0) {
                     ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
                     ctx.fillRect(p.x, p.y, 25, 25);
                     if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
+                    if(p.name === document.getElementById('nameInput').value || p.team === 'red') { // Kendi canını göster
+                         document.getElementById('hpDisplay').innerText = `CAN: ${Math.ceil(p.hp)}`;
+                    }
                 }
             });
+
             d.bullets.forEach(b => { ctx.fillStyle='orange'; ctx.fillRect(b.x, b.y, 8, 8); });
             d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
 
-        // ZOOM ENGELLEYİCİ
         document.addEventListener('touchstart', e => { if(e.touches.length>1) e.preventDefault(); }, {passive:false});
         let lastT = 0; document.addEventListener('touchend', e => { let n = Date.now(); if(n-lastT<=300) e.preventDefault(); lastT=n; }, false);
     </script>
