@@ -1,106 +1,54 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <style>
-        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; touch-action: manipulation; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; overflow-y: auto; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; cursor: pointer; }
-        .room-item { background: #444; padding: 10px; margin: 5px; border-radius: 8px; width: 220px; display: flex; justify-content: space-between; align-items: center; }
-        .join-btn { background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-        .help-panel { background: #333; padding: 10px; border-radius: 8px; font-size: 13px; text-align: left; width: 250px; margin-bottom: 10px; border-left: 4px solid #ff9800; }
-        .controls-container { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 10px; }
-        .row { display: flex; gap: 12px; }
-        .ctrl-btn { width: 60px; height: 60px; background: #444; border-radius: 12px; color: white; border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .fire-btn { background: #ff4444 !important; width: 80px; }
-        .special-btn { background: #ff9800 !important; color: black !important; width: 80px; font-size: 32px; border: 3px solid white; box-shadow: 0 0 15px #ff9800; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; overflow: hidden; }
+        canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 5px auto; width: 320px; height: 320px; }
+        .ctrl-btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; margin: 2px; border-radius: 10px; }
+        .special-btn { background: #ff9800 !important; width: 80px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="gameOverlay" class="overlay">
-        <h2>KARE OYUNLARI</h2>
-        <div class="help-panel">
-            <b>NASIL OYNANIR:</b><br>
-            • <b>Zombi:</b> Merkezde doğarsın, B tuşuyla alan hasarı at!<br>
-            • <b>Savaş:</b> Herkes tek! 3 canın var.<br>
-            • <b>Labirent:</b> Savaşma, çıkıştaki 🏆'ya ulaş!
-        </div>
-        <input type="text" id="nameInput" placeholder="İsim..." style="padding:10px; width:220px; margin:5px; border-radius:8px;">
-        <input type="text" id="roomNameInput" placeholder="Oda Adı" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
-        <select id="modeSelect" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
-            <option value="zombi">Zombi Modu</option>
-            <option value="savas">Savaş Modu</option>
-            <option value="labirent">Labirent Modu</option>
-        </select>
-        <button class="btn" onclick="createRoom()">ODA KUR</button>
-        <hr style="width: 220px; border: 1px solid #555; margin: 15px;">
-        <h4>AKTİF ODALAR</h4>
-        <div id="roomListContainer">Oda bulunamadı...</div>
+    <div id="menu">
+        <input type="text" id="name" placeholder="İsim">
+        <button onclick="socket.emit('createRoom', {userName: document.getElementById('name').value, mode: 'zombi'})">BAŞLA</button>
     </div>
-
-    <div id="lobby" class="overlay" style="display:none;"><h3>Lobi</h3><div id="playerList"></div><button class="btn" id="sBtn" style="display:none;" onclick="socket.emit('startGameSignal')">BAŞLAT</button></div>
-    <div id="status" style="color:#FFD700; font-weight:bold; height: 20px;">...</div>
+    <div id="status"></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    
-    <div class="controls-container">
-        <div class="row"><button class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</button></div>
-        <div class="row"><button class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</button><button class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</button><button class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</button></div>
-        <div class="row">
-            <button id="fireBtn" class="ctrl-btn fire-btn" ontouchstart="socket.emit('fire')">🔥</button>
-            <button id="specialBtn" class="ctrl-btn special-btn" ontouchstart="socket.emit('specialPower')">B</button>
-        </div>
+    <div class="row">
+        <button class="ctrl-btn" onpointerdown="socket.emit('move','up')">▲</button>
     </div>
+    <div class="row">
+        <button class="ctrl-btn" onpointerdown="socket.emit('move','left')">◀</button>
+        <button class="ctrl-btn" onpointerdown="socket.emit('move','down')">▼</button>
+        <button class="ctrl-btn" onpointerdown="socket.emit('move','right')">▶</button>
+    </div>
+    <button class="ctrl-btn special-btn" onpointerdown="socket.emit('specialPower')">B</button>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let currentEffect = null; let gameMode = '';
+        const socket = io(); const ctx = document.getElementById('gameCanvas').getContext('2d');
+        let effect = null;
 
-        socket.on('roomList', (rooms) => {
-            const container = document.getElementById('roomListContainer');
-            container.innerHTML = rooms.length === 0 ? "Oda bulunamadı..." : rooms.map(n => `<div class="room-item"><span>${n}</span><button class="join-btn" onclick="joinRoom('${n}')">GİR</button></div>`).join("");
-        });
-
-        function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
-        function joinRoom(name) { socket.emit('joinExistingRoom', { roomName: name, userName: document.getElementById('nameInput').value }); }
-        
-        socket.on('joined', d => { 
-            gameMode = d.mode; document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; 
-            if(d.isLeader) document.getElementById('sBtn').style.display='block';
-            document.getElementById('fireBtn').style.display = (gameMode === 'labirent' ? 'none' : 'flex');
-            document.getElementById('specialBtn').style.display = (gameMode === 'zombi' ? 'flex' : 'none');
-        });
-        
-        socket.on('winner', m => { alert(m); location.reload(); });
-        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
-        socket.on('updatePlayerList', d => { document.getElementById('playerList').innerHTML = d.players.map(p => `<div>• ${p.name}</div>`).join(""); });
-
+        socket.on('joined', () => document.getElementById('menu').style.display='none');
         socket.on('specialEffect', d => { 
-            currentEffect = {x: d.x, y: d.y, r: 0}; 
-            const anim = setInterval(() => { if(currentEffect) currentEffect.r += 20; if(currentEffect && currentEffect.r > 180) { clearInterval(anim); currentEffect = null; } }, 15); 
+            effect = {x: d.x, y: d.y, r: 0};
+            let anim = setInterval(() => {
+                effect.r += 10;
+                if(effect.r > 80) { clearInterval(anim); effect = null; } // GÖRSEL KİLİT 80
+            }, 20);
         });
 
         socket.on('state', d => {
-            ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
-            if(d.mode === 'labirent') { ctx.fillStyle = "#FFD700"; ctx.beginPath(); ctx.arc(20, 20, 15, 0, Math.PI*2); ctx.fill(); ctx.fillStyle = "black"; ctx.fillText("🏆", 10, 25); }
-            if(currentEffect) { ctx.beginPath(); ctx.arc(currentEffect.x, currentEffect.y, currentEffect.r, 0, Math.PI*2); ctx.strokeStyle = "rgba(0, 191, 255, 0.8)"; ctx.lineWidth = 5; ctx.stroke(); ctx.fillStyle = "rgba(0, 191, 255, 0.2)"; ctx.fill(); }
-            (d.bullets||[]).forEach(b=>{ ctx.fillStyle="#FFD700"; ctx.fillRect(b.x,b.y,12,12); ctx.strokeStyle="black"; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,12,12); });
-            (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
-            for(let id in d.players){ 
-                let p = d.players[id]; if(p.hp > 0) { 
-                    ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); 
-                    if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi' ? `Dalga: ${d.wave} | Can: ${Math.ceil(p.hp)}` : `Can: ${p.hp}`);
-                } 
+            ctx.clearRect(0,0,400,400);
+            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle="cyan"; ctx.stroke(); }
+            (d.zombies||[]).forEach(z => { ctx.fillStyle="green"; ctx.fillRect(z.x, z.y, 25, 25); });
+            for(let id in d.players) {
+                let p = d.players[id];
+                ctx.fillStyle=p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                if(id === socket.id) document.getElementById('status').innerText = "Can: " + Math.ceil(p.hp);
             }
-        });
-
-        window.addEventListener('keydown', e => {
-            const keys = { w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
-            if(keys[e.key]) socket.emit('move', keys[e.key]);
-            if(e.code === 'Space' && gameMode !== 'labirent') socket.emit('fire');
-            if(e.key.toLowerCase() === 'b' && gameMode === 'zombi') socket.emit('specialPower');
         });
     </script>
 </body>
