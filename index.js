@@ -9,13 +9,19 @@ app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); }
 
 let rooms = {};
 
+// Duvar Tanımları (x, y, genişlik, yükseklik)
+const WALLS = [
+    {x: 60, y: 100, w: 20, h: 200},  // Kırmızı Takım Duvarı
+    {x: 320, y: 100, w: 20, h: 200}  // Mavi Takım Duvarı
+];
+
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
         const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
         rooms[rName] = { 
             players: {}, bullets: [], zombies: [], 
             mode: data.mode || 'zombi', wave: 1,
-            flags: { red: {x: 30, y: 190}, blue: {x: 350, y: 190} }
+            flags: { red: {x: 20, y: 190, taken: false}, blue: {x: 360, y: 190, taken: false} }
         };
         joinProcess(socket, rName, data.userName);
     });
@@ -26,9 +32,9 @@ io.on('connection', (socket) => {
         let r = rooms[rName];
         let team = (r.mode === 'bayrak' || r.mode === 'vs') ? (Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue') : 'solo';
         r.players[socket.id] = { 
-            id: socket.id, x: (team==='red'?70:310), y: 190, hp: (r.mode === 'vs' ? 3 : 10), 
+            id: socket.id, x: (team==='red'?20:360), y: 190, hp: (r.mode === 'vs' ? 3 : 10), 
             name: uName || "Osman", color: (team === 'red' ? 'red' : 'blue'), 
-            lastFire: 0, lastDir: 'up', team: team
+            lastSpecial: 0, lastFire: 0, team: team, hasFlag: false
         };
         socket.emit('joined', { mode: r.mode });
     }
@@ -36,16 +42,15 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName];
         let p = r?.players[socket.id];
-        if (p && Date.now() - p.lastFire > 1000) { 
+        // Bayrak taşıyan ateş edemez!
+        if (p && !p.hasFlag && Date.now() - p.lastFire > 1000) { 
             p.lastFire = Date.now();
             if (r.mode === 'bayrak') {
-                // SADECE BAYRAK MODUNDA 4 YÖN
-                [[0,-7], [0,7], [-7,0], [7,0]].forEach(v => {
+                [[0,-7], [0,7], [-7,0], [7,0]].forEach(v => { // 4 Yön
                     r.bullets.push({ x: p.x+8, y: p.y+8, dx: v[0], dy: v[1], owner: socket.id });
                 });
             } else {
-                // DİĞER MODLARDA TEK YÖN
-                const v = { up: [0,-7], down: [0,7], left: [-7,0], right: [7,0] }[p.lastDir];
+                const v = { up: [0,-7], down: [0,7], left: [-7,0], right: [7,0] }[p.lastDir || 'up'];
                 r.bullets.push({ x: p.x+8, y: p.y+8, dx: v[0], dy: v[1], owner: socket.id });
             }
         }
@@ -55,17 +60,70 @@ io.on('connection', (socket) => {
         let p = rooms[socket.roomName]?.players[socket.id];
         if (p) { 
             p.lastDir = dir;
-            if(dir==='up') p.y-=20; if(dir==='down') p.y+=20; 
-            if(dir==='left') p.x-=20; if(dir==='right') p.x+=20;
-            p.x = Math.max(0, Math.min(375, p.x)); p.y = Math.max(0, Math.min(375, p.y));
+            // Bayrak taşıyan yavaş gider (10 birim yerine 20)
+            let speed = p.hasFlag ? 10 : 20; 
+            let newX = p.x, newY = p.y;
+
+            if(dir==='up') newY -= speed; if(dir==='down') newY += speed; 
+            if(dir==='left') newX -= speed; if(dir==='right') newX += speed;
+
+            // Duvar Çarpışma Kontrolü (Sadece Bayrak Modunda)
+            let hitWall = false;
+            if (rooms[socket.roomName].mode === 'bayrak') {
+                WALLS.forEach(w => {
+                    if (newX < w.x + w.w && newX + 25 > w.x && newY < w.y + w.h && newY + 25 > w.y) hitWall = true;
+                });
+            }
+
+            if (!hitWall) {
+                p.x = Math.max(0, Math.min(375, newX)); 
+                p.y = Math.max(0, Math.min(375, newY));
+            }
+        }
+    });
+
+    socket.on('specialPower', () => { // Alan Hasarı (B Tuşu)
+        let r = rooms[socket.roomName]; let p = r?.players[socket.id];
+        if (p && Date.now() - p.lastSpecial > 15000) {
+            p.lastSpecial = Date.now();
+            io.to(socket.roomName).emit('specialEffect', { x: p.x+12, y: p.y+12 });
+            if (r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x-p.x, z.y-p.y) > 80);
         }
     });
 
     setInterval(() => {
         for (let n in rooms) {
             let r = rooms[n];
+            
+            // Bayrak Mantığı
+            if (r.mode === 'bayrak') {
+                for (let id in r.players) {
+                    let p = r.players[id];
+                    let enemyColor = p.team === 'red' ? 'blue' : 'red';
+                    // Bayrağı Al
+                    if (!p.hasFlag && !r.flags[enemyColor].taken && Math.hypot(p.x - r.flags[enemyColor].x, p.y - r.flags[enemyColor].y) < 30) {
+                        p.hasFlag = true;
+                        r.flags[enemyColor].taken = true;
+                    }
+                    // Bayrağı Teslim Et
+                    if (p.hasFlag && Math.hypot(p.x - (p.team==='red'?20:360), p.y - 190) < 30) {
+                        p.hasFlag = false;
+                        r.flags[enemyColor].taken = false;
+                        // Puan sistemi buraya eklenebilir
+                    }
+                }
+            }
+
+            // Mermiler ve Duvarlar
             r.bullets.forEach((b, bi) => { 
                 b.x += b.dx; b.y += b.dy; 
+                // Duvara çarpma
+                if (r.mode === 'bayrak') {
+                    WALLS.forEach(w => {
+                        if (b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1);
+                    });
+                }
+                // Zombi Vurma
                 if (r.mode === 'zombi') {
                     r.zombies.forEach((z, zi) => {
                         if (Math.hypot(b.x - z.x, b.y - z.y) < 25) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); }
@@ -74,19 +132,24 @@ io.on('connection', (socket) => {
                 if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi,1); 
             });
 
+            // Zombi Dalga Sistemi
             if (r.mode === 'zombi') {
+                if (r.zombies.length === 0) { // Zombiler bittiyse yeni dalga
+                    r.wave++;
+                    let count = r.wave * 3; // Her dalgada artan sayı
+                    for(let i=0; i<count; i++) {
+                        let side = Math.floor(Math.random()*4);
+                        let zx = side===2?0:(side===3?400:Math.random()*400);
+                        let zy = side===0?0:(side===1?400:Math.random()*400);
+                        r.zombies.push({x: zx, y: zy});
+                    }
+                }
                 r.zombies.forEach(z => {
                     let t = Object.values(r.players)[0];
                     if(t) { z.x+=(z.x<t.x?0.5:-0.5); z.y+=(z.y<t.y?0.5:-0.5); if(Math.hypot(z.x-t.x,z.y-t.y)<20) t.hp-=0.05; }
                 });
-                if(r.zombies.length < r.wave+5) {
-                    let side = Math.floor(Math.random()*4);
-                    let zx = side===2?0:(side===3?400:Math.random()*400);
-                    let zy = side===0?0:(side===1?400:Math.random()*400);
-                    r.zombies.push({x: zx, y: zy});
-                }
             }
-            io.to(n).emit('state', r);
+            io.to(n).emit('state', { ...r, walls: WALLS });
         }
     }, 50);
 });
