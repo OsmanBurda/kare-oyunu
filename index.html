@@ -1,117 +1,107 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <style>
-        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
-        body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
-        
-        #topPanel { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; color: #4CAF50; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
-        
-        #infoPanel { width: 320px; min-height: 50px; background: #222; margin: 5px auto; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #444; pointer-events: none; }
-        .stats { display: flex; justify-content: space-around; font-weight: bold; font-size: 14px; }
+const express = require('express');
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
 
-        .controls-wrapper { position: absolute; bottom: 20px; width: 100%; height: 160px; pointer-events: none; }
-        .controls-wrapper > * { pointer-events: auto; }
-        .d-pad { position: absolute; left: 20px; bottom: 0; display: grid; grid-template-areas: ". u ." "l d r"; gap: 10px; }
-        .action-pad { position: absolute; right: 20px; bottom: 0; display: flex; flex-direction: column; gap: 15px; align-items: center; }
-        
-        .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; color: white; }
-        .btn-b { background: blue !important; width: 60px; height: 60px; }
-        .btn-fire { background: rgba(200, 0, 0, 0.6) !important; width: 85px; height: 85px; border-color: #ff0000; font-size: 32px; }
-        
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    </style>
-</head>
-<body oncontextmenu="return false;">
-    <div id="gameOverlay" class="overlay">
-        <h2>OSMAN OYUN</h2>
-        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; margin-bottom:10px;">
-        <select id="modeSelect" style="padding:10px; margin-bottom:10px;">
-            <option value="savas">SAVAŞ</option>
-            <option value="zombi">ZOMBİ</option>
-            <option value="bayrak">BAYRAK</option>
-        </select>
-        <button onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})" style="padding:15px; width:200px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">BAŞLA</button>
-    </div>
+app.use(express.static(__dirname));
+app.get('/', (req, res) => { res.sendFile(__dirname + '/index.html'); });
 
-    <div id="topPanel">
-        <span id="hpDisplay">Can: -</span>
-        <span id="modeDisplay">MOD: -</span>
-    </div>
-    
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
+let rooms = {};
 
-    <div id="infoPanel">
-        <div class="stats" id="statsRow">
-            <span>SKOR: 0-0</span>
-        </div>
-        <div id="winner" style="color:gold; font-weight:bold; font-size:12px;"></div>
-    </div>
+io.on('connection', (socket) => {
+    socket.on('createRoom', (data) => {
+        const rName = data.roomName || "OsmanOda";
+        rooms[rName] = { 
+            players: {}, bullets: [], zombies: [], mode: data.mode, 
+            status: 'playing', wave: 1, lastWaveTime: Date.now(),
+            flags: { red: {x: 20, y: 20}, blue: {x: 360, y: 360} },
+            scores: { red: 0, blue: 0 }, winner: null
+        };
+        joinProcess(socket, rName, data.userName);
+    });
 
-    <div class="controls-wrapper">
-        <div class="d-pad">
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</div>
-        </div>
-        <div class="action-pad">
-            <div class="ctrl-btn btn-b" ontouchstart="socket.emit('specialPower')">B</div>
-            <div class="ctrl-btn btn-fire" ontouchstart="socket.emit('fire')">🔥</div>
-        </div>
-    </div>
+    function joinProcess(socket, rName, uName) {
+        socket.join(rName); socket.roomName = rName;
+        let r = rooms[rName];
+        let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
+        let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
+        r.players[socket.id] = { 
+            x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
+            name: uName || "Osman", color: team, team: team,
+            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+        };
+        socket.emit('joined');
+    }
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        let blastEffect = null;
+    socket.on('specialPower', () => {
+        let r = rooms[socket.roomName]; if(!r) return;
+        let p = r.players[socket.id];
+        if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
+            r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
+            io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12});
+            p.lastBlast = Date.now();
+        }
+    });
 
-        socket.on('joined', () => document.getElementById('gameOverlay').style.display='none');
-        socket.on('blastEffect', data => { blastEffect = { ...data, r: 0 }; });
-
-        socket.on('state', d => {
-            ctx.clearRect(0,0,400,400);
-            
-            if(blastEffect) {
-                ctx.beginPath();
-                ctx.arc(blastEffect.x, blastEffect.y, blastEffect.r, 0, Math.PI*2);
-                ctx.fillStyle = `rgba(255, 0, 0, ${0.4 - (blastEffect.r/400)})`;
-                ctx.fill();
-                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - blastEffect.r/150})`;
-                ctx.lineWidth = 2; ctx.stroke();
-                blastEffect.r += 12;
-                if(blastEffect.r > 150) blastEffect = null;
+    socket.on('fire', () => {
+        let r = rooms[socket.roomName]; if(!r) return;
+        let p = r.players[socket.id];
+        let cd = (r.mode === 'savas' ? 1000 : 250);
+        if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
+            if(r.mode === 'bayrak') {
+                ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
+            } else {
+                r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
             }
+            p.lastFire = Date.now();
+        }
+    });
 
-            document.getElementById('modeDisplay').innerText = "MOD: " + d.mode.toUpperCase();
-            document.getElementById('statsRow').innerHTML = (d.mode === 'bayrak' ? `<span>SKOR: <b style="color:red">${d.scores.red}</b> - <b style="color:blue">${d.scores.blue}</b></span>` : `<span>DALGA: ${d.wave}</span>`);
-            document.getElementById('winner').innerText = d.winner ? "KAZANAN: " + d.winner : "";
+    socket.on('move', (dir) => {
+        let r = rooms[socket.roomName]; if(!r || r.winner) return;
+        let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
+        let s = 20;
+        if (dir === 'up' && p.y > 0) p.y -= s;
+        if (dir === 'down' && p.y < 375) p.y += s;
+        if (dir === 'left' && p.x > 0) p.x -= s;
+        if (dir === 'right' && p.x < 375) p.x += s;
+        p.lastDir = dir;
+    });
+});
 
-            if(d.mode === 'bayrak'){
-                ctx.fillStyle='red'; ctx.fillRect(d.flags.red.x, d.flags.red.y, 25, 25);
-                ctx.fillStyle='blue'; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 25, 25);
-            }
-
-            Object.values(d.players).forEach(p => {
-                if(p.hp > 0) {
-                    ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
-                    ctx.fillRect(p.x, p.y, 25, 25);
-                    if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
-                    if(p.name === document.getElementById('nameInput').value) {
-                        document.getElementById('hpDisplay').innerText = "Can: " + Math.ceil(p.hp);
-                    }
+setInterval(() => {
+    for(let n in rooms) {
+        let r = rooms[n];
+        if(r.mode === 'zombi' && !r.winner) {
+            if(Date.now() - r.lastWaveTime > 20000) { r.wave++; r.lastWaveTime = Date.now(); }
+            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0});
+            r.zombies.forEach((z) => {
+                let targets = Object.values(r.players).filter(p => p.hp > 0);
+                if(targets[0]) {
+                    z.x += (z.x < targets[0].x ? 0.8 : -0.8); z.y += (z.y < targets[0].y ? 0.8 : -0.8);
+                    if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05;
                 }
             });
-
-            d.bullets.forEach(b => { ctx.fillStyle='orange'; ctx.fillRect(b.x, b.y, 8, 8); });
-            d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
+        }
+        r.bullets.forEach((b, bi) => {
+            if(b.dir==='up') b.y-=15; else if(b.dir==='down') b.y+=15; else if(b.dir==='left') b.x-=15; else if(b.dir==='right') b.x+=15;
+            if(r.mode === 'zombi') {
+                r.zombies.forEach((z, zi) => {
+                    if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) {
+                        r.zombies.splice(zi, 1); r.bullets.splice(bi, 1);
+                    }
+                });
+            }
+            for(let id in r.players) {
+                let t = r.players[id];
+                if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
+                    t.hp -= 1; r.bullets.splice(bi, 1);
+                }
+            }
+            if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
         });
+        io.to(n).emit('state', r);
+    }
+}, 50);
 
-        // KALICI ZOOM VE KAYDIRMA KİLİDİ
-        document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
-        let lastT = 0; document.addEventListener('touchend', e => { let n = Date.now(); if(n-lastT<=300) e.preventDefault(); lastT=n; }, false);
-    </script>
-</body>
-</html>
+http.listen(process.env.PORT || 3000);
