@@ -26,12 +26,16 @@ io.on('connection', (socket) => {
         let r = rooms[rName];
         let hp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
         r.players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: hp, lastDir: 'up', lastFire: 0, lastSpecial: 0 };
-        socket.emit('joined', { isLeader: (r.leader === socket.id) });
+        socket.emit('joined', { isLeader: (r.leader === socket.id), mode: r.mode });
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players)});
     }
 
     socket.on('specialPower', () => {
-        let r = rooms[socket.roomName]; let p = r?.players[socket.id];
+        let r = rooms[socket.roomName]; 
+        // SAVAŞ MODUNDA ÖZEL GÜÇ KAPALI
+        if(!r || r.mode === 'savas') return; 
+        
+        let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastSpecial > 5000) { 
             p.lastSpecial = Date.now();
             io.to(socket.roomName).emit('specialEffect', {x: p.x + 12, y: p.y + 12});
