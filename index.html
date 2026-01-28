@@ -4,8 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        * { touch-action: none !important; -webkit-user-select: none !important; -webkit-tap-highlight-color: transparent; outline: none; }
-        html, body { position: fixed; width: 100%; height: 100%; overflow: hidden; background: #111; margin: 0; padding: 0; font-family: sans-serif; }
+        /* TÜM DOKUNMATİK HAREKETLERİ KİLİTLE */
+        * { 
+            touch-action: none !important; 
+            -webkit-user-select: none !important; 
+            -webkit-tap-highlight-color: transparent; 
+            user-select: none !important;
+        }
+        
+        html, body { 
+            position: fixed; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            background: #111; 
+            margin: 0; 
+            padding: 0; 
+            font-family: sans-serif; 
+        }
 
         #ui-top { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; color: #4CAF50; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
@@ -35,7 +51,7 @@
 
     <div id="ui-top"><span id="hpText">Can: -</span><span id="modText">MOD: -</span></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div id="wave-panel" id="statsRow">DALGA: 1</div>
+    <div id="wave-panel" id="statsRow">HAZIR</div>
 
     <div class="controls">
         <div class="dpad">
@@ -54,7 +70,17 @@
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let blast = null;
-        window.addEventListener('gesturestart', e => e.preventDefault());
+
+        // --- YAKINLAŞTIRMA KİLİDİ ---
+        // Çift tıklamayı engelle
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) { e.preventDefault(); }
+        }, { passive: false });
+
+        // İki parmakla yakınlaştırmayı (pinch-to-zoom) engelle
+        document.addEventListener('gesturestart', (e) => {
+            e.preventDefault();
+        });
 
         socket.on('blastEffect', d => { blast = { ...d, r: 0 }; });
         socket.on('state', r => {
@@ -77,10 +103,15 @@
             });
             r.zombies.forEach(z => { ctx.fillStyle = '#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
             r.bullets.forEach(b => { ctx.fillStyle = 'orange'; ctx.fillRect(b.x, b.y, 8, 8); });
+            
             document.getElementById('hpText').innerText = "Can: " + Math.ceil(Object.values(r.players)[0]?.hp || 0);
             document.getElementById('modText').innerText = "MOD: " + r.mode.toUpperCase();
             document.getElementById('wave-panel').innerText = (r.mode === 'bayrak' ? `SKOR: RED ${r.scores.red} - BLUE ${r.scores.blue}` : `DALGA: ${r.wave}`);
-            if(r.winner) { alert("KAZANAN: " + r.winner.toUpperCase()); location.reload(); }
+            
+            if(r.winner) { 
+                alert("KAZANAN: " + r.winner.toUpperCase()); 
+                location.reload(); 
+            }
         });
     </script>
 </body>
