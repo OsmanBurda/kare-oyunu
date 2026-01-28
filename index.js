@@ -1,10 +1,7 @@
 const express = require('express');
 const app = express();
 const http = require('http').Server(app);
-const io = require('socket.io')(http, {
-    pingTimeout: 30000,
-    pingInterval: 10000
-});
+const io = require('socket.io')(http);
 
 app.use(express.static(__dirname));
 
@@ -16,8 +13,7 @@ io.on('connection', (socket) => {
         if (!rooms[rName]) {
             rooms[rName] = { 
                 players: {}, bullets: [], zombies: [], mode: data.mode || 'zombi', 
-                wave: 1, scores: { red: 0, blue: 0 }, winner: null,
-                flags: { red: {x: 30, y: 30}, blue: {x: 345, y: 345} }
+                wave: 1, scores: { red: 0, blue: 0 }, winner: null
             };
         }
         joinProcess(socket, rName, data.userName);
@@ -28,40 +24,48 @@ io.on('connection', (socket) => {
         socket.roomName = rName;
         let r = rooms[rName];
         let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
-        let hpVal = r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1);
-        
+        let hpVal = r.mode === 'zombi' ? 10 : 3;
         r.players[socket.id] = { 
-            x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
-            name: uName || "Osman", team: team, hp: hpVal, maxHp: hpVal,
-            lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+            x: 200, y: 200, team: team, hp: hpVal, lastDir: 'up', lastFire: 0, lastBlast: 0
         };
-        socket.emit('joined');
     }
 
     socket.on('move', (dir) => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
         const s = 15;
-        if (dir === 'up' && p.y > 5) p.y -= s;
-        if (dir === 'down' && p.y < 370) p.y += s;
-        if (dir === 'left' && p.x > 5) p.x -= s;
-        if (dir === 'right' && p.x < 370) p.x += s;
+        if (dir === 'up' && p.y > 10) p.y -= s;
+        if (dir === 'down' && p.y < 380) p.y += s;
+        if (dir === 'left' && p.x > 10) p.x -= s;
+        if (dir === 'right' && p.x < 380) p.x += s;
         p.lastDir = dir;
     });
 
+    socket.on('specialPower', () => {
+        let r = rooms[socket.roomName]; if(!r) return;
+        let p = r.players[socket.id];
+        if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
+            r.zombies = r.zombies.filter(z => Math.hypot(z.x - (p.x+12), z.y - (p.y+12)) > 80);
+            io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12, range: 80});
+            p.lastBlast = Date.now();
+        }
+    });
+
     socket.on('disconnect', () => {
-        for(let n in rooms) if(rooms[n].players[socket.id]) delete rooms[n].players[socket.id];
+        if(socket.roomName && rooms[socket.roomName]) {
+            delete rooms[socket.roomName].players[socket.id];
+        }
     });
 });
 
 setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n];
-        if(r.mode === 'zombi' && r.zombies.length < 10) r.zombies.push({x: Math.random()*370, y: 0});
+        if(r.mode === 'zombi' && r.zombies.length < 6) r.zombies.push({x: Math.random()*380, y: 0});
         r.zombies.forEach(z => {
             let targets = Object.values(r.players).filter(p => p.hp > 0);
             if(targets[0]) {
-                z.x += (z.x < targets[0].x ? 2 : -2); z.y += (z.y < targets[0].y ? 2 : -2);
+                z.x += (z.x < targets[0].x ? 2.5 : -2.5); z.y += (z.y < targets[0].y ? 2.5 : -2.5);
                 if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.1;
             }
         });
