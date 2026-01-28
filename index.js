@@ -24,9 +24,8 @@ io.on('connection', (socket) => {
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
-        // CAN AYARI: VS MODU 3 CAN
-        let initialHp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-        r.players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: initialHp, lastDir: 'up', lastFire: 0, lastSpecial: 0 };
+        let hp = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
+        r.players[socket.id] = { id: socket.id, x: 185, y: 185, name: uName || "Kare", color: '#' + Math.floor(Math.random()*16777215).toString(16), hp: hp, lastDir: 'up', lastFire: 0, lastSpecial: 0 };
         socket.emit('joined', { isLeader: (r.leader === socket.id) });
         io.to(rName).emit('updatePlayerList', {players: Object.values(r.players)});
     }
@@ -35,10 +34,10 @@ io.on('connection', (socket) => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastSpecial > 5000) { 
             p.lastSpecial = Date.now();
-            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 100);
+            if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
             for(let id in r.players) {
                 let target = r.players[id];
-                if(id !== socket.id && Math.hypot(target.x - p.x, target.y - p.y) < 80) target.hp -= 1;
+                if(id !== socket.id && Math.hypot(target.x - p.x, target.y - p.y) < 100) target.hp -= 1;
             }
         }
     });
