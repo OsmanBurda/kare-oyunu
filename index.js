@@ -9,10 +9,10 @@ app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); }
 
 let rooms = {};
 
-// Duvar Tanımları (x, y, genişlik, yükseklik)
+// Duvarlar (Base Koruması)
 const WALLS = [
-    {x: 60, y: 100, w: 20, h: 200},  // Kırmızı Takım Duvarı
-    {x: 320, y: 100, w: 20, h: 200}  // Mavi Takım Duvarı
+    {x: 60, y: 100, w: 20, h: 200},  // Kırmızı Duvar
+    {x: 320, y: 100, w: 20, h: 200}  // Mavi Duvar
 ];
 
 io.on('connection', (socket) => {
@@ -21,7 +21,8 @@ io.on('connection', (socket) => {
         rooms[rName] = { 
             players: {}, bullets: [], zombies: [], 
             mode: data.mode || 'zombi', wave: 1,
-            flags: { red: {x: 20, y: 190, taken: false}, blue: {x: 360, y: 190, taken: false} }
+            flags: { red: {x: 20, y: 190, taken: false}, blue: {x: 360, y: 190, taken: false} },
+            scores: { red: 0, blue: 0 } // SKOR SİSTEMİ
         };
         joinProcess(socket, rName, data.userName);
     });
@@ -31,9 +32,14 @@ io.on('connection', (socket) => {
         socket.roomName = rName;
         let r = rooms[rName];
         let team = (r.mode === 'bayrak' || r.mode === 'vs') ? (Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue') : 'solo';
+        
+        // Oyuncu Başlangıç Ayarları
         r.players[socket.id] = { 
-            id: socket.id, x: (team==='red'?20:360), y: 190, hp: (r.mode === 'vs' ? 3 : 10), 
-            name: uName || "Osman", color: (team === 'red' ? 'red' : 'blue'), 
+            id: socket.id, 
+            x: (team==='red'?20:360), y: 190, // Doğuş yerleri
+            hp: (r.mode === 'vs' ? 3 : 10), 
+            name: uName || "Osman", 
+            color: (team === 'red' ? 'red' : 'blue'), 
             lastSpecial: 0, lastFire: 0, team: team, hasFlag: false
         };
         socket.emit('joined', { mode: r.mode });
@@ -42,8 +48,8 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName];
         let p = r?.players[socket.id];
-        // Bayrak taşıyan ateş edemez!
-        if (p && !p.hasFlag && Date.now() - p.lastFire > 1000) { 
+        // Bayrak taşıyan ateş edemez, ölüler ateş edemez
+        if (p && p.hp > 0 && !p.hasFlag && Date.now() - p.lastFire > 1000) { 
             p.lastFire = Date.now();
             if (r.mode === 'bayrak') {
                 [[0,-7], [0,7], [-7,0], [7,0]].forEach(v => { // 4 Yön
@@ -58,16 +64,15 @@ io.on('connection', (socket) => {
 
     socket.on('move', (dir) => {
         let p = rooms[socket.roomName]?.players[socket.id];
-        if (p) { 
+        if (p && p.hp > 0) { // Sadece canlılar hareket eder
             p.lastDir = dir;
-            // Bayrak taşıyan yavaş gider (10 birim yerine 20)
-            let speed = p.hasFlag ? 10 : 20; 
+            let speed = p.hasFlag ? 10 : 20; // Bayrakla yavaşlama
             let newX = p.x, newY = p.y;
 
             if(dir==='up') newY -= speed; if(dir==='down') newY += speed; 
             if(dir==='left') newX -= speed; if(dir==='right') newX += speed;
 
-            // Duvar Çarpışma Kontrolü (Sadece Bayrak Modunda)
+            // Duvar Kontrolü
             let hitWall = false;
             if (rooms[socket.roomName].mode === 'bayrak') {
                 WALLS.forEach(w => {
@@ -82,9 +87,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('specialPower', () => { // Alan Hasarı (B Tuşu)
+    socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        if (p && Date.now() - p.lastSpecial > 15000) {
+        if (p && p.hp > 0 && Date.now() - p.lastSpecial > 15000) {
             p.lastSpecial = Date.now();
             io.to(socket.roomName).emit('specialEffect', { x: p.x+12, y: p.y+12 });
             if (r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x-p.x, z.y-p.y) > 80);
@@ -95,35 +100,44 @@ io.on('connection', (socket) => {
         for (let n in rooms) {
             let r = rooms[n];
             
-            // Bayrak Mantığı
+            // --- BAYRAK MODU MANTIĞI ---
             if (r.mode === 'bayrak') {
                 for (let id in r.players) {
                     let p = r.players[id];
                     let enemyColor = p.team === 'red' ? 'blue' : 'red';
-                    // Bayrağı Al
+                    
+                    // Bayrağı Alma
                     if (!p.hasFlag && !r.flags[enemyColor].taken && Math.hypot(p.x - r.flags[enemyColor].x, p.y - r.flags[enemyColor].y) < 30) {
                         p.hasFlag = true;
                         r.flags[enemyColor].taken = true;
                     }
-                    // Bayrağı Teslim Et
-                    if (p.hasFlag && Math.hypot(p.x - (p.team==='red'?20:360), p.y - 190) < 30) {
+                    
+                    // Bayrağı Teslim Etme (SKOR KAZANMA)
+                    let homeBaseX = p.team === 'red' ? 20 : 360;
+                    if (p.hasFlag && Math.hypot(p.x - homeBaseX, p.y - 190) < 30) {
                         p.hasFlag = false;
                         r.flags[enemyColor].taken = false;
-                        // Puan sistemi buraya eklenebilir
+                        r.scores[p.team]++; // SKORU ARTIR
+                        
+                        // OYUN BİTİŞİ (3 PUAN)
+                        if (r.scores[p.team] >= 3) {
+                            io.to(n).emit('gameOver', { winner: p.team });
+                            r.scores = { red: 0, blue: 0 }; // Skoru sıfırla
+                            // Herkesi respawn yap
+                            Object.values(r.players).forEach(pl => {
+                                pl.x = (pl.team==='red'?20:360); pl.y = 190; pl.hp = 10; pl.hasFlag = false;
+                            });
+                        }
                     }
                 }
             }
 
-            // Mermiler ve Duvarlar
+            // --- MERMİLER ---
             r.bullets.forEach((b, bi) => { 
                 b.x += b.dx; b.y += b.dy; 
-                // Duvara çarpma
                 if (r.mode === 'bayrak') {
-                    WALLS.forEach(w => {
-                        if (b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1);
-                    });
+                    WALLS.forEach(w => { if (b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1); });
                 }
-                // Zombi Vurma
                 if (r.mode === 'zombi') {
                     r.zombies.forEach((z, zi) => {
                         if (Math.hypot(b.x - z.x, b.y - z.y) < 25) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); }
@@ -132,11 +146,11 @@ io.on('connection', (socket) => {
                 if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi,1); 
             });
 
-            // Zombi Dalga Sistemi
+            // --- ZOMBİ HASARI VE CAN KONTROLÜ ---
             if (r.mode === 'zombi') {
-                if (r.zombies.length === 0) { // Zombiler bittiyse yeni dalga
+                if (r.zombies.length === 0) { // Yeni Dalga
                     r.wave++;
-                    let count = r.wave * 3; // Her dalgada artan sayı
+                    let count = r.wave * 3;
                     for(let i=0; i<count; i++) {
                         let side = Math.floor(Math.random()*4);
                         let zx = side===2?0:(side===3?400:Math.random()*400);
@@ -145,10 +159,28 @@ io.on('connection', (socket) => {
                     }
                 }
                 r.zombies.forEach(z => {
-                    let t = Object.values(r.players)[0];
-                    if(t) { z.x+=(z.x<t.x?0.5:-0.5); z.y+=(z.y<t.y?0.5:-0.5); if(Math.hypot(z.x-t.x,z.y-t.y)<20) t.hp-=0.05; }
+                    let t = Object.values(r.players).find(pl => pl.hp > 0); // Sadece canlılara git
+                    if(t) { 
+                        z.x+=(z.x<t.x?0.5:-0.5); z.y+=(z.y<t.y?0.5:-0.5); 
+                        if(Math.hypot(z.x-t.x,z.y-t.y)<20) {
+                            t.hp -= 0.05; // Can azalt
+                        }
+                    }
                 });
             }
+
+            // --- ÖLÜM VE RESPAWN SİSTEMİ (Negatif Can Düzeltmesi) ---
+            for(let id in r.players) {
+                let p = r.players[id];
+                if (p.hp <= 0) {
+                    p.hp = 10; // Canı fulle
+                    p.hasFlag = false; // Bayrağı düşür
+                    if(r.mode === 'bayrak') r.flags[p.team==='red'?'blue':'red'].taken = false;
+                    p.x = (p.team==='red'?20:360); // Base'e ışınla
+                    p.y = 190;
+                }
+            }
+
             io.to(n).emit('state', { ...r, walls: WALLS });
         }
     }, 50);
