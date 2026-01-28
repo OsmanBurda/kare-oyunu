@@ -25,7 +25,6 @@ io.on('connection', (socket) => {
         socket.roomName = rName;
         let r = rooms[rName];
         let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
-        // MODA GÖRE CAN AYARI: Zombi 10, Savaş 3, Bayrak 1
         let hpVal = r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1);
         
         r.players[socket.id] = { 
@@ -39,7 +38,6 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        // B GÜCÜ (Sadece Zombi Modu)
         if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - (p.x+12), z.y - (p.y+12)) > 80);
             io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12, range: 80});
@@ -50,11 +48,9 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        // Savaş modunda 1 saniye cooldown
         let cd = (r.mode === 'savas' ? 1000 : 250); 
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
             if(r.mode === 'bayrak') {
-                // Bayrak modunda 4 yöne ateş
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
             } else {
                 r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
@@ -73,7 +69,6 @@ io.on('connection', (socket) => {
         if (dir === 'right' && p.x < 375) p.x += s;
         p.lastDir = dir;
 
-        // BAYRAK KAPMA MANTIĞI
         if(r.mode === 'bayrak') {
             let enemyTeam = p.team === 'red' ? 'blue' : 'red';
             if(!p.hasFlag && Math.hypot(p.x - r.flags[enemyTeam].x, p.y - r.flags[enemyTeam].y) < 30) p.hasFlag = true;
@@ -104,7 +99,7 @@ setInterval(() => {
                 let t = r.players[id];
                 if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
                     t.hp -= 1; r.bullets.splice(bi, 1);
-                    if(t.hasFlag) t.hasFlag = false; // Ölen bayrağı bırakır
+                    if(t.hasFlag) t.hasFlag = false;
                 }
             }
             if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
