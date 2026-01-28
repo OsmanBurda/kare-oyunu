@@ -5,38 +5,38 @@
     <style>
         * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
         body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; }
-        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; }
-        .ctrl-btn { width: 65px; height: 65px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
-        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .btn { padding: 15px; background: #4CAF50; color: white; border: none; width: 200px; margin: 10px; font-weight: bold; border-radius: 10px; }
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; border-radius: 8px; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; padding: 0 10px; }
+        .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { padding: 15px; background: #4CAF50; color: white; border: none; width: 220px; margin: 10px; font-weight: bold; border-radius: 10px; }
     </style>
 </head>
 <body>
     <div id="gameOverlay" class="overlay">
         <h2>OSMAN OYUN</h2>
-        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px;">
-        <select id="modeSelect" style="padding:10px; margin:10px;">
-            <option value="savas">SAVAŞ (3HP)</option>
-            <option value="zombi">ZOMBİ (10HP)</option>
+        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; border-radius:5px; border:none;">
+        <select id="modeSelect" style="padding:10px; margin:10px; border-radius:5px;">
+            <option value="savas">SAVAŞ (3 HP)</option>
+            <option value="zombi">ZOMBİ (10 HP)</option>
             <option value="bayrak">BAYRAK KAPMACA</option>
         </select>
         <button class="btn" onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})">BAŞLAT</button>
     </div>
 
+    <div id="status" style="margin-top:5px; font-weight:bold; color:#4CAF50;">Can: - | Skor: 0-0</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    <div id="status"></div>
 
     <div class="controls">
-        <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:5px;">
+        <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:8px;">
             <div class="ctrl-btn" style="grid-area:u" ontouchstart="socket.emit('move','up')">▲</div>
             <div class="ctrl-btn" style="grid-area:l" ontouchstart="socket.emit('move','left')">◀</div>
             <div class="ctrl-btn" style="grid-area:d" ontouchstart="socket.emit('move','down')">▼</div>
             <div class="ctrl-btn" style="grid-area:r" ontouchstart="socket.emit('move','right')">▶</div>
         </div>
         <div style="display:flex; flex-direction:column; gap:10px;">
-            <div class="ctrl-btn" style="background:blue;" ontouchstart="socket.emit('specialPower')">B</div>
-            <div class="ctrl-btn" style="background:red;" ontouchstart="socket.emit('fire')">🔥</div>
+            <div class="ctrl-btn" style="background:blue; width:55px; height:55px;" ontouchstart="socket.emit('specialPower')">B</div>
+            <div class="ctrl-btn" style="background:rgba(255,0,0,0.5); width:80px; height:80px;" ontouchstart="socket.emit('fire')">🔥</div>
         </div>
     </div>
 
@@ -44,22 +44,25 @@
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         socket.on('joined', () => document.getElementById('gameOverlay').style.display='none');
+
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-            if(d.mode==='bayrak'){
-                ctx.fillStyle='red'; ctx.fillRect(d.flags.red.x, d.flags.red.y, 20, 20);
-                ctx.fillStyle='blue'; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 20, 20);
+            if(d.mode === 'bayrak'){
+                ctx.fillStyle='red'; ctx.fillRect(d.flags.red.x, d.flags.red.y, 25, 25);
+                ctx.fillStyle='blue'; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 25, 25);
             }
             Object.values(d.players).forEach(p => {
-                ctx.fillStyle = p.team === 'red' ? 'red' : 'blue';
-                ctx.fillRect(p.x, p.y, 25, 25);
-                if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
+                if(p.hp > 0) {
+                    ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
+                    ctx.fillRect(p.x, p.y, 25, 25);
+                    if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
+                }
             });
             d.bullets.forEach(b => { ctx.fillStyle='orange'; ctx.fillRect(b.x, b.y, 8, 8); });
-            d.zombies.forEach(z => { ctx.fillStyle='green'; ctx.fillRect(z.x, z.y, 25, 25); });
+            d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
 
-        // ZOOM KİLİDİ
+        // ZOOM ENGELLEYİCİ
         document.addEventListener('touchstart', e => { if(e.touches.length>1) e.preventDefault(); }, {passive:false});
         let lastT = 0; document.addEventListener('touchend', e => { let n = Date.now(); if(n-lastT<=300) e.preventDefault(); lastT=n; }, false);
     </script>
