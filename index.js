@@ -4,7 +4,6 @@ const http = require('http').Server(app);
 const io = require('socket.io')(http);
 const path = require('path');
 
-// Sunucu dosya yolu kilitleri
 app.use(express.static(__dirname));
 app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); });
 
@@ -34,18 +33,16 @@ io.on('connection', (socket) => {
         socket.emit('joined', { mode: r.mode });
     }
 
-    // ATEŞ SİSTEMİ KİLİDİ
     socket.on('fire', () => {
         let r = rooms[socket.roomName];
         let p = r?.players[socket.id];
-        if (p && Date.now() - p.lastFire > 1000) { // 1 saniye cooldown
+        if (p && Date.now() - p.lastFire > 1000) { 
             p.lastFire = Date.now();
             const v = { up: [0,-7], down: [0,7], left: [-7,0], right: [7,0] }[p.lastDir];
             r.bullets.push({ x: p.x+8, y: p.y+8, dx: v[0], dy: v[1], owner: socket.id });
         }
     });
 
-    // ÖZEL GÜÇ KİLİDİ: 15 SN & 80 MENZİL
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName];
         let p = r?.players[socket.id];
@@ -66,13 +63,23 @@ io.on('connection', (socket) => {
     setInterval(() => {
         for (let n in rooms) {
             let r = rooms[n];
-            r.bullets.forEach((b, i) => { 
+            // MERMİ ÇARPIŞMA VE ÖLDÜRME SİSTEMİ
+            r.bullets.forEach((b, bi) => { 
                 b.x += b.dx; b.y += b.dy; 
-                if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(i,1); 
+                if (r.mode === 'zombi') {
+                    r.zombies.forEach((z, zi) => {
+                        if (Math.hypot(b.x - z.x, b.y - z.y) < 25) {
+                            r.zombies.splice(zi, 1);
+                            r.bullets.splice(bi, 1);
+                        }
+                    });
+                }
+                if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi,1); 
             });
+
             if (r.mode === 'zombi') {
                 r.zombies.forEach(z => {
-                    let t = Object.values(r.players)[0];
+                    let t = Object.values(r.players).find(p => p.hp > 0);
                     if(t) { 
                         z.x+=(z.x<t.x?0.5:-0.5); z.y+=(z.y<t.y?0.5:-0.5); 
                         if(Math.hypot(z.x-t.x,z.y-t.y)<20) t.hp-=0.05; 
@@ -84,5 +91,4 @@ io.on('connection', (socket) => {
         }
     }, 50);
 });
-
 http.listen(process.env.PORT || 3000);
