@@ -9,7 +9,7 @@
         .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:100; display:flex; flex-direction:column; align-items:center; padding: 20px; }
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; cursor: pointer; }
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); width: 260px; margin: 10px auto; gap: 10px; }
-        .ctrl-btn { width: 70px; height: 70px; background: #444; border-radius: 15px; color: white; border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .ctrl-btn { width: 70px; height: 70px; background: #444; border-radius: 15px; color: white; border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; }
         .fire-btn { background: #ff4444 !important; }
         .special-btn { background: #ff9800 !important; color: black; font-weight: bold; font-size: 30px; }
     </style>
@@ -36,17 +36,41 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+        let explosions = [];
+
         function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
         socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
         socket.on('updatePlayerList', d => { document.getElementById('playerList').innerHTML = d.players.map(p => `<div>• ${p.name}</div>`).join(""); });
         socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
         socket.on('winner', m => { alert(m); location.reload(); });
+        
+        // PATLAMA SİNYALİ ALININCA
+        socket.on('explosionEffect', data => {
+            explosions.push({x: data.x, y: data.y, r: 10, alpha: 1, color: data.color});
+        });
+
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
+            
+            // PATLAMA ÇİZİMİ
+            explosions.forEach((ex, i) => {
+                ctx.beginPath();
+                ctx.arc(ex.x, ex.y, ex.r, 0, Math.PI*2);
+                ctx.strokeStyle = ex.color;
+                ctx.lineWidth = 4;
+                ctx.globalAlpha = ex.alpha;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+                ex.r += 5; ex.alpha -= 0.05;
+                if(ex.alpha <= 0) explosions.splice(i, 1);
+            });
+
+            // ALTIN SARISI MERMİLER
             (d.bullets||[]).forEach(b=>{
-                ctx.fillStyle="#FFD700"; ctx.fillRect(b.x,b.y,12,12); // ALTIN SARISI MERMİ
+                ctx.fillStyle="#FFEA00"; ctx.fillRect(b.x,b.y,12,12);
                 ctx.strokeStyle="black"; ctx.lineWidth=2; ctx.strokeRect(b.x,b.y,12,12);
             });
+            
             (d.zombies||[]).forEach(z=>{ctx.fillStyle="green"; ctx.fillRect(z.x,z.y,25,25);});
             for(let id in d.players){ 
                 let p = d.players[id]; if(p.hp > 0) { 
@@ -55,6 +79,7 @@
                 } 
             }
         });
+
         window.addEventListener('keydown', e => {
             const keys = { w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
             if(keys[e.key]) socket.emit('move', keys[e.key]);
