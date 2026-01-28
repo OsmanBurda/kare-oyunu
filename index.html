@@ -1,78 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
-        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; border-radius: 8px; }
-        .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content: center; }
-        .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; }
-        .controls-container { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-around; align-items: center; }
-        .d-pad { display: grid; grid-template-areas: ". up ." "left down right"; gap: 10px; }
-        .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.15); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
-        .fire-btn { background: rgba(255, 0, 0, 0.4); width: 90px; height: 90px; border-color: #ff4444; }
-        #adminPanel { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.9); padding: 10px; border: 2px solid #ff0055; border-radius: 12px; display: none; z-index: 200; }
-        #admTrigger { position: absolute; top: 0; right: 0; width: 50px; height: 50px; z-index: 201; opacity: 0; }
+        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
+        body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 10px auto; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-around; }
+        .ctrl-btn { width: 65px; height: 65px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .btn { padding: 15px; background: #4CAF50; color: white; border: none; width: 200px; margin: 10px; font-weight: bold; border-radius: 10px; }
     </style>
 </head>
-<body oncontextmenu="return false;">
-    <div id="admTrigger" onclick="toggleAdmin()"></div>
-    <div id="adminPanel">
-        <button class="btn" style="width:120px;" onclick="adminMode('savas')">SAVAŞ</button><br>
-        <button class="btn" style="width:120px;" onclick="adminMode('zombi')">ZOMBİ</button><br>
-        <button class="btn" style="width:120px; background:#555;" onclick="toggleAdmin()">KAPAT</button>
-    </div>
-
+<body>
     <div id="gameOverlay" class="overlay">
         <h2>OSMAN OYUN</h2>
-        <input type="text" id="nameInput" style="padding:10px; margin:5px;" placeholder="İsmin">
-        <select id="modeSelect" style="padding:10px; margin:5px;"><option value="savas">SAVAŞ</option><option value="zombi">ZOMBİ</option></select>
-        <button class="btn" onclick="createRoom()">BAŞLA</button>
+        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px;">
+        <select id="modeSelect" style="padding:10px; margin:10px;">
+            <option value="savas">SAVAŞ (3HP)</option>
+            <option value="zombi">ZOMBİ (10HP)</option>
+            <option value="bayrak">BAYRAK KAPMACA</option>
+        </select>
+        <button class="btn" onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})">BAŞLAT</button>
     </div>
 
-    <div id="lobby" class="overlay" style="display:none;">
-        <button class="btn" id="sBtn" style="display:none;" onclick="socket.emit('startGameSignal')">OYUNU BAŞLAT</button>
-    </div>
-
-    <div id="status" style="position:absolute; top:10px; left:10px; color:#4CAF50; font-weight:bold;">Can: 0</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
-    
-    <div class="controls-container">
-        <div class="d-pad">
-            <div class="ctrl-btn" style="grid-area: up;" ontouchstart="socket.emit('move','up')">▲</div>
-            <div class="ctrl-btn" style="grid-area: left;" ontouchstart="socket.emit('move','left')">◀</div>
-            <div class="ctrl-btn" style="grid-area: down;" ontouchstart="socket.emit('move','down')">▼</div>
-            <div class="ctrl-btn" style="grid-area: right;" ontouchstart="socket.emit('move','right')">▶</div>
+    <div id="status"></div>
+
+    <div class="controls">
+        <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:5px;">
+            <div class="ctrl-btn" style="grid-area:u" ontouchstart="socket.emit('move','up')">▲</div>
+            <div class="ctrl-btn" style="grid-area:l" ontouchstart="socket.emit('move','left')">◀</div>
+            <div class="ctrl-btn" style="grid-area:d" ontouchstart="socket.emit('move','down')">▼</div>
+            <div class="ctrl-btn" style="grid-area:r" ontouchstart="socket.emit('move','right')">▶</div>
         </div>
-        <div class="action-btns">
-            <div class="ctrl-btn" style="background:blue; width:55px; height:55px; margin-bottom:15px;" ontouchstart="socket.emit('specialPower')">B</div>
-            <div class="ctrl-btn fire-btn" ontouchstart="socket.emit('fire')">🔥</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+            <div class="ctrl-btn" style="background:blue;" ontouchstart="socket.emit('specialPower')">B</div>
+            <div class="ctrl-btn" style="background:red;" ontouchstart="socket.emit('fire')">🔥</div>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
-        function toggleAdmin() { const p = document.getElementById('adminPanel'); p.style.display = p.style.display === 'block' ? 'none' : 'block'; }
-        function adminMode(m) { socket.emit('adminChangeMode', m); toggleAdmin(); }
-        function createRoom() { socket.emit('createRoom', { roomName: "OsmanOda", userName: document.getElementById('nameInput').value || "Osman", mode: document.getElementById('modeSelect').value }); }
-        
-        socket.on('joined', d => { document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; if(d.isLeader) document.getElementById('sBtn').style.display='block'; });
-        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
-
+        socket.on('joined', () => document.getElementById('gameOverlay').style.display='none');
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-            (d.bullets||[]).forEach(b => { ctx.fillStyle="orange"; ctx.fillRect(b.x, b.y, 8, 8); });
-            (d.zombies||[]).forEach(z => { ctx.fillStyle="green"; ctx.fillRect(z.x, z.y, 25, 25); });
-            for(let id in d.players){ 
-                let p = d.players[id]; if(p.hp > 0) { 
-                    ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                    if(id===socket.id) document.getElementById('status').innerText = "Can: " + Math.ceil(p.hp) + " | " + d.mode.toUpperCase(); 
-                } 
+            if(d.mode==='bayrak'){
+                ctx.fillStyle='red'; ctx.fillRect(d.flags.red.x, d.flags.red.y, 20, 20);
+                ctx.fillStyle='blue'; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 20, 20);
             }
+            Object.values(d.players).forEach(p => {
+                ctx.fillStyle = p.team === 'red' ? 'red' : 'blue';
+                ctx.fillRect(p.x, p.y, 25, 25);
+                if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
+            });
+            d.bullets.forEach(b => { ctx.fillStyle='orange'; ctx.fillRect(b.x, b.y, 8, 8); });
+            d.zombies.forEach(z => { ctx.fillStyle='green'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
-        document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+
+        // ZOOM KİLİDİ
+        document.addEventListener('touchstart', e => { if(e.touches.length>1) e.preventDefault(); }, {passive:false});
+        let lastT = 0; document.addEventListener('touchend', e => { let n = Date.now(); if(n-lastT<=300) e.preventDefault(); lastT=n; }, false);
     </script>
 </body>
 </html>
