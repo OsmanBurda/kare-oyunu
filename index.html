@@ -5,16 +5,22 @@
     <style>
         * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
         body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
+        
+        #topPanel { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; color: #4CAF50; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
+        
         #infoPanel { width: 320px; min-height: 50px; background: #222; margin: 5px auto; border-radius: 10px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #444; pointer-events: none; }
         .stats { display: flex; justify-content: space-around; font-weight: bold; font-size: 14px; }
+
         .controls-wrapper { position: absolute; bottom: 20px; width: 100%; height: 160px; pointer-events: none; }
         .controls-wrapper > * { pointer-events: auto; }
         .d-pad { position: absolute; left: 20px; bottom: 0; display: grid; grid-template-areas: ". u ." "l d r"; gap: 10px; }
         .action-pad { position: absolute; right: 20px; bottom: 0; display: flex; flex-direction: column; gap: 15px; align-items: center; }
+        
         .ctrl-btn { width: 65px; height: 65px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; color: white; }
         .btn-b { background: blue !important; width: 60px; height: 60px; }
         .btn-fire { background: rgba(200, 0, 0, 0.6) !important; width: 85px; height: 85px; border-color: #ff0000; font-size: 32px; }
+        
         .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     </style>
 </head>
@@ -30,12 +36,15 @@
         <button onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})" style="padding:15px; width:200px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">BAŞLA</button>
     </div>
 
-    <div id="hpDisplay" style="color:#4CAF50; font-weight:bold; margin-top:5px; height: 20px;">CAN: -</div>
+    <div id="topPanel">
+        <span id="hpDisplay">Can: -</span>
+        <span id="modeDisplay">MOD: -</span>
+    </div>
+    
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
     <div id="infoPanel">
         <div class="stats" id="statsRow">
-            <span>MOD: -</span>
             <span>SKOR: 0-0</span>
         </div>
         <div id="winner" style="color:gold; font-weight:bold; font-size:12px;"></div>
@@ -65,23 +74,19 @@
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
             
-            // İÇİ DOLU PATLAMA EFEKTİ
             if(blastEffect) {
                 ctx.beginPath();
                 ctx.arc(blastEffect.x, blastEffect.y, blastEffect.r, 0, Math.PI*2);
-                // İçi dolu (fill) ve giderek saydamlaşan kırmızı
                 ctx.fillStyle = `rgba(255, 0, 0, ${0.4 - (blastEffect.r/400)})`;
                 ctx.fill();
-                // Kenar çizgisi
                 ctx.strokeStyle = `rgba(255, 0, 0, ${1 - blastEffect.r/150})`;
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                
-                blastEffect.r += 12; // Büyüme hızı
+                ctx.lineWidth = 2; ctx.stroke();
+                blastEffect.r += 12;
                 if(blastEffect.r > 150) blastEffect = null;
             }
 
-            document.getElementById('statsRow').innerHTML = `<span>MOD: ${d.mode.toUpperCase()}</span>` + (d.mode === 'bayrak' ? `<span>SKOR: <b style="color:red">${d.scores.red}</b> - <b style="color:blue">${d.scores.blue}</b></span>` : `<span>DALGA: ${d.wave}</span>`);
+            document.getElementById('modeDisplay').innerText = "MOD: " + d.mode.toUpperCase();
+            document.getElementById('statsRow').innerHTML = (d.mode === 'bayrak' ? `<span>SKOR: <b style="color:red">${d.scores.red}</b> - <b style="color:blue">${d.scores.blue}</b></span>` : `<span>DALGA: ${d.wave}</span>`);
             document.getElementById('winner').innerText = d.winner ? "KAZANAN: " + d.winner : "";
 
             if(d.mode === 'bayrak'){
@@ -94,7 +99,9 @@
                     ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
                     ctx.fillRect(p.x, p.y, 25, 25);
                     if(p.hasFlag) { ctx.fillStyle='yellow'; ctx.fillRect(p.x+5, p.y+5, 15, 15); }
-                    if(p.name === document.getElementById('nameInput').value) document.getElementById('hpDisplay').innerText = "CAN: " + Math.ceil(p.hp);
+                    if(p.name === document.getElementById('nameInput').value) {
+                        document.getElementById('hpDisplay').innerText = "Can: " + Math.ceil(p.hp);
+                    }
                 }
             });
 
@@ -102,7 +109,7 @@
             d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
 
-        // ZOOM KİLİDİ
+        // KALICI ZOOM VE KAYDIRMA KİLİDİ
         document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
         let lastT = 0; document.addEventListener('touchend', e => { let n = Date.now(); if(n-lastT<=300) e.preventDefault(); lastT=n; }, false);
     </script>
