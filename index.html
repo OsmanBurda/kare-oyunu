@@ -6,11 +6,11 @@
         * { touch-action: none; box-sizing: border-box; }
         body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         #menu { position: fixed; inset: 0; background: #1a1a1a; z-index: 1000; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; display: none; margin: 10px auto; border-radius: 8px; }
-        .room-box { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 260px; display: flex; justify-content: space-between; border-left: 5px solid #4CAF50; }
+        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; display: none; margin: 5px auto; border-radius: 8px; }
+        .room-box { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 260px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #4CAF50; }
         .btn { padding: 15px; border-radius: 10px; border: none; font-weight: bold; color: white; background: #444; }
-        #start-panel { display: none; margin-top: 20px; }
-        #ui-layer { display: none; font-size: 18px; color: #FFD700; padding: 10px; }
+        #start-panel { display: none; margin: 10px; padding: 10px; background: #333; border-radius: 10px; }
+        #ui-layer { display: none; font-size: 18px; color: #FFD700; padding: 10px; height: 40px; }
         #controls { display: none; flex-direction: column; align-items: center; gap: 5px; }
     </style>
 </head>
@@ -18,32 +18,32 @@
     <div id="menu">
         <h2 style="color:#4CAF50">LOBİ</h2>
         <input type="text" id="uname" placeholder="Adın" style="padding:12px; width:240px; margin-bottom:10px;">
-        <div id="roomList" style="margin: 10px 0; max-height: 150px; overflow-y: auto;"></div>
+        <div id="roomList" style="margin: 10px 0; max-height: 150px; overflow-y: auto; width: 260px;"></div>
         <input type="text" id="rname" placeholder="Oda Adı" style="padding:12px; width:240px;">
         <select id="mode" style="padding:12px; width:240px; margin: 10px;">
             <option value="zombi">Zombi Modu</option>
             <option value="bayrak">Bayrak Kapmaca</option>
             <option value="vs">Savaş (VS)</option>
         </select>
-        <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; color:white;">ODA KUR</button>
+        <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; color:white; font-weight:bold;">ODA KUR</button>
     </div>
 
     <div id="start-panel">
-        <h3 id="wait-msg">Kurucu bekleniyor...</h3>
-        <button id="start-btn" onclick="socket.emit('startGame')" style="background:#4CAF50; padding:20px; border-radius:10px; display:none;">OYUNU BAŞLAT</button>
+        <h3 id="wait-msg">Lobiye girildi...</h3>
+        <button id="start-btn" onclick="socket.emit('startGame')" style="background:#4CAF50; padding:15px; border-radius:10px; display:none; width:100%; color:white; font-weight:bold;">OYUNU BAŞLAT</button>
     </div>
 
     <div id="ui-layer">Can: 10</div>
     <canvas id="game" width="400" height="400"></canvas>
 
     <div id="controls">
-        <div style="display: grid; grid-template-areas: '. u .' 'l d r'; gap: 5px;">
-            <button class="btn" style="grid-area: u; width:60px; height:60px" onpointerdown="socket.emit('move','up')">▲</button>
-            <button class="btn" style="grid-area: l; width:60px; height:60px" onpointerdown="socket.emit('move','left')">◀</button>
-            <button class="btn" style="grid-area: d; width:60px; height:60px" onpointerdown="socket.emit('move','down')">▼</button>
-            <button class="btn" style="grid-area: r; width:60px; height:60px" onpointerdown="socket.emit('move','right')">▶</button>
+        <div style="display: grid; grid-template-areas: '. u .' 'l d r'; gap: 8px;">
+            <button class="btn" style="grid-area: u; width:65px; height:65px" onpointerdown="socket.emit('move','up')">▲</button>
+            <button class="btn" style="grid-area: l; width:65px; height:65px" onpointerdown="socket.emit('move','left')">◀</button>
+            <button class="btn" style="grid-area: d; width:65px; height:65px" onpointerdown="socket.emit('move','down')">▼</button>
+            <button class="btn" style="grid-area: r; width:65px; height:65px" onpointerdown="socket.emit('move','right')">▶</button>
         </div>
-        <button class="btn" style="background:#f44336; width:150px; height:60px; margin-top:10px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
+        <button class="btn" style="background:#f44336; width:140px; height:65px; margin-top:10px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -59,16 +59,18 @@
             socket.emit('createRoom', {userName: u, roomName: r, mode: m});
             document.getElementById('menu').style.display = 'none';
             document.getElementById('start-panel').style.display = 'block';
+            document.getElementById('game').style.display = 'block'; // Odaya girince hemen göster
+            document.getElementById('ui-layer').style.display = 'flex';
+            document.getElementById('controls').style.display = 'flex';
         }
 
         socket.on('roomList', list => {
-            const container = document.getElementById('roomList');
-            container.innerHTML = "";
+            const container = document.getElementById('roomList'); container.innerHTML = "";
             list.forEach(room => {
                 if(!room.started) {
                     container.innerHTML += `<div class="room-box">
                         <span><b>${room.name}</b></span>
-                        <button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; border-radius:5px;">GİR</button>
+                        <button onclick="join('${room.name}')" style="background:#4CAF50; color:white; border:none; border-radius:5px; padding:5px 10px;">GİR</button>
                     </div>`;
                 }
             });
@@ -77,21 +79,17 @@
         socket.on('joined', d => {
             if(d.isHost) {
                 document.getElementById('start-btn').style.display = 'block';
-                document.getElementById('wait-msg').innerText = "Odayı kurdun, başlatman bekleniyor.";
+                document.getElementById('wait-msg').innerText = "Hazırsan başlat!";
+            } else {
+                document.getElementById('wait-msg').innerText = "Kurucu başlatınca hareket edebilirsin.";
             }
         });
 
         socket.on('gameStarted', () => {
             document.getElementById('start-panel').style.display = 'none';
-            document.getElementById('game').style.display = 'block';
-            document.getElementById('ui-layer').style.display = 'flex';
-            document.getElementById('controls').style.display = 'flex';
         });
 
-        socket.on('gameOver', d => {
-            alert(d.msg);
-            location.reload(); // Herkesi en başa (menüye) atar
-        });
+        socket.on('gameOver', d => { alert(d.msg); location.reload(); });
 
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400);
@@ -106,8 +104,17 @@
             for(let id in r.players) {
                 let p = r.players[id];
                 ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                ctx.fillStyle = "white"; ctx.font = "12px sans-serif";
+                ctx.fillText(p.name, p.x, p.y - 5); // İsimleri çiz
                 if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12, p.y-10, 8, 0, Math.PI*2); ctx.fill(); }
-                if(id === socket.id && r.mode !== 'bayrak') document.getElementById('ui-layer').innerText = `Can: ${Math.max(0, Math.ceil(p.hp))}`;
+                if(id === socket.id && r.mode !== 'bayrak') {
+                    document.getElementById('ui-layer').innerText = `Can: ${Math.max(0, Math.ceil(p.hp))}`;
+                }
+            }
+            if(!r.started) { // Oyun başlamadıysa ekranın ortasına yazı yaz
+                ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,180,400,40);
+                ctx.fillStyle = "white"; ctx.textAlign = "center";
+                ctx.fillText("OYUNUN BAŞLAMASI BEKLENİYOR...", 200, 205);
             }
         });
     </script>
