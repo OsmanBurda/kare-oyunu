@@ -38,6 +38,7 @@ io.on('connection', (socket) => {
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
+            io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12});
             p.lastBlast = Date.now();
         }
     });
@@ -47,7 +48,6 @@ io.on('connection', (socket) => {
         let p = r.players[socket.id];
         let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
-            // Bayrak modunda 4 yöne ateş aktif
             if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
             } else {
