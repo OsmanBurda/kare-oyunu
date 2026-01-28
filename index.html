@@ -3,20 +3,22 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none; -webkit-tap-highlight-color: transparent; }
-        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; }
-        canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 10px auto; width: 320px; height: 320px; }
+        * { touch-action: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        canvas { border: 4px solid #4CAF50; background: #eee; display: block; margin: 10px auto; width: 320px; height: 320px; border-radius: 8px; }
         .btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; border-radius: 10px; margin: 5px; }
-        .special-btn { background: #ff9800 !important; width: 80px; font-weight: bold; }
-        #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+        .special-btn { background: #ff9800 !important; width: 80px; font-weight: bold; color: black; border: 2px solid white; }
+        #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
     </style>
 </head>
 <body>
     <div id="menu">
-        <button onclick="start()" style="padding:15px 30px; font-size:20px; background:#4CAF50; color:white; border:none; border-radius:5px;">BAŞLA</button>
+        <button onclick="start()" style="padding:15px 40px; background:#4CAF50; color:white; border:none; border-radius:5px; font-weight:bold; font-size:20px;">OYUNA BAŞLA</button>
     </div>
-    <div id="status">Can: 10</div>
+
+    <div id="status" style="margin-top:10px; font-weight:bold; color:#FFD700;">Can: 10</div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
+
     <div>
         <button class="btn" onpointerdown="socket.emit('move','up')">▲</button><br>
         <button class="btn" onpointerdown="socket.emit('move','left')">◀</button>
@@ -41,7 +43,7 @@
 
         socket.on('state', d => {
             ctx.clearRect(0, 0, 400, 400);
-            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle="cyan"; ctx.stroke(); }
+            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle="cyan"; ctx.lineWidth=3; ctx.stroke(); }
             (d.zombies || []).forEach(z => { ctx.fillStyle = "green"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in d.players) {
                 let p = d.players[id]; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
