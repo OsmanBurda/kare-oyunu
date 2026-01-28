@@ -1,107 +1,105 @@
-const express = require('express');
-const app = express();
-const http = require('http').Server(app);
-const io = require('socket.io')(http);
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
+        body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
+        
+        #topPanel { width: 320px; margin: 10px auto 0; display: flex; justify-content: space-between; font-weight: bold; color: #4CAF50; font-size: 18px; }
+        canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
+        
+        #infoPanel { width: 320px; height: 45px; background: #222; margin: 5px auto; border-radius: 10px; display: flex; align-items: center; justify-content: center; border: 1px solid #444; }
 
-app.use(express.static(__dirname));
-app.get('/', (req, res) => { res.sendFile(__dirname + '/index.html'); });
+        /* TUŞ TAKIMI DÜZELTME */
+        .controls-wrapper { position: absolute; bottom: 30px; width: 100%; height: 180px; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: none; }
+        .controls-wrapper > * { pointer-events: auto; }
 
-let rooms = {};
+        /* Sol Yön Tuşları (Artı Şekli) */
+        .d-pad { display: grid; grid-template-areas: ". u ." "l . r" ". d ."; gap: 5px; }
+        .btn-up { grid-area: u; } .btn-down { grid-area: d; } .btn-left { grid-area: l; } .btn-right { grid-area: r; }
 
-io.on('connection', (socket) => {
-    socket.on('createRoom', (data) => {
-        const rName = data.roomName || "OsmanOda";
-        rooms[rName] = { 
-            players: {}, bullets: [], zombies: [], mode: data.mode, 
-            status: 'playing', wave: 1, lastWaveTime: Date.now(),
-            flags: { red: {x: 20, y: 20}, blue: {x: 360, y: 360} },
-            scores: { red: 0, blue: 0 }, winner: null
-        };
-        joinProcess(socket, rName, data.userName);
-    });
+        /* Sağ Aksiyon Tuşları (Üst üste) */
+        .action-pad { display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: flex-end; }
+        
+        .ctrl-btn { width: 60px; height: 60px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #666; color: white; }
+        .btn-b { background: blue !important; width: 65px; height: 65px; border-color: #0000cd; font-weight: bold; }
+        .btn-fire { background: #cc0000 !important; width: 85px; height: 85px; border-color: #8b0000; font-size: 35px; }
+        
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div id="gameOverlay" class="overlay">
+        <h2>OSMAN OYUN</h2>
+        <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; margin-bottom:10px;">
+        <select id="modeSelect" style="padding:10px; margin-bottom:10px;">
+            <option value="savas">SAVAŞ</option>
+            <option value="zombi">ZOMBİ</option>
+            <option value="bayrak">BAYRAK</option>
+        </select>
+        <button onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})" style="padding:15px; width:200px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">BAŞLA</button>
+    </div>
 
-    function joinProcess(socket, rName, uName) {
-        socket.join(rName); socket.roomName = rName;
-        let r = rooms[rName];
-        let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
-        let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
-        r.players[socket.id] = { 
-            x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
-            name: uName || "Osman", color: team, team: team,
-            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
-        };
-        socket.emit('joined');
-    }
+    <div id="topPanel">
+        <span id="hpDisplay">Can: -</span>
+        <span id="modeDisplay">MOD: -</span>
+    </div>
+    
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
 
-    socket.on('specialPower', () => {
-        let r = rooms[socket.roomName]; if(!r) return;
-        let p = r.players[socket.id];
-        if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
-            r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
-            io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12});
-            p.lastBlast = Date.now();
-        }
-    });
+    <div id="infoPanel">
+        <div id="statsRow" style="font-weight:bold;">DALGA: 1</div>
+    </div>
 
-    socket.on('fire', () => {
-        let r = rooms[socket.roomName]; if(!r) return;
-        let p = r.players[socket.id];
-        let cd = (r.mode === 'savas' ? 1000 : 250);
-        if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
-            if(r.mode === 'bayrak') {
-                ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
-            } else {
-                r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
+    <div class="controls-wrapper">
+        <div class="d-pad">
+            <div class="ctrl-btn btn-up" ontouchstart="socket.emit('move','up')">▲</div>
+            <div class="ctrl-btn btn-left" ontouchstart="socket.emit('move','left')">◀</div>
+            <div class="ctrl-btn btn-right" ontouchstart="socket.emit('move','right')">▶</div>
+            <div class="ctrl-btn btn-down" ontouchstart="socket.emit('move','down')">▼</div>
+        </div>
+        <div class="action-pad">
+            <div class="ctrl-btn btn-b" ontouchstart="socket.emit('specialPower')">B</div>
+            <div class="ctrl-btn btn-fire" ontouchstart="socket.emit('fire')">🔥</div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
+        let blastEffect = null;
+
+        socket.on('joined', () => document.getElementById('gameOverlay').style.display='none');
+        socket.on('blastEffect', data => { blastEffect = { ...data, r: 0 }; });
+
+        socket.on('state', d => {
+            ctx.clearRect(0,0,400,400);
+            if(blastEffect) {
+                ctx.beginPath(); ctx.arc(blastEffect.x, blastEffect.y, blastEffect.r, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(255, 0, 0, ${0.4 - (blastEffect.r/400)})`; ctx.fill();
+                ctx.strokeStyle = `rgba(255, 0, 0, ${1 - blastEffect.r/150})`;
+                ctx.lineWidth = 2; ctx.stroke(); blastEffect.r += 12;
+                if(blastEffect.r > 150) blastEffect = null;
             }
-            p.lastFire = Date.now();
-        }
-    });
 
-    socket.on('move', (dir) => {
-        let r = rooms[socket.roomName]; if(!r || r.winner) return;
-        let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
-        let s = 20;
-        if (dir === 'up' && p.y > 0) p.y -= s;
-        if (dir === 'down' && p.y < 375) p.y += s;
-        if (dir === 'left' && p.x > 0) p.x -= s;
-        if (dir === 'right' && p.x < 375) p.x += s;
-        p.lastDir = dir;
-    });
-});
+            document.getElementById('modeDisplay').innerText = d.mode.toUpperCase();
+            document.getElementById('statsRow').innerHTML = (d.mode === 'bayrak' ? `SKOR: <span style="color:red">${d.scores.red}</span> - <span style="color:blue">${d.scores.blue}</span>` : `DALGA: ${d.wave}`);
 
-setInterval(() => {
-    for(let n in rooms) {
-        let r = rooms[n];
-        if(r.mode === 'zombi' && !r.winner) {
-            if(Date.now() - r.lastWaveTime > 20000) { r.wave++; r.lastWaveTime = Date.now(); }
-            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0});
-            r.zombies.forEach((z) => {
-                let targets = Object.values(r.players).filter(p => p.hp > 0);
-                if(targets[0]) {
-                    z.x += (z.x < targets[0].x ? 0.8 : -0.8); z.y += (z.y < targets[0].y ? 0.8 : -0.8);
-                    if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05;
+            Object.values(d.players).forEach(p => {
+                if(p.hp > 0) {
+                    ctx.fillStyle = p.team === 'red' ? '#ff4444' : '#4444ff';
+                    ctx.fillRect(p.x, p.y, 25, 25);
+                    if(p.name === document.getElementById('nameInput').value) {
+                        document.getElementById('hpDisplay').innerText = "Can: " + Math.ceil(p.hp);
+                    }
                 }
             });
-        }
-        r.bullets.forEach((b, bi) => {
-            if(b.dir==='up') b.y-=15; else if(b.dir==='down') b.y+=15; else if(b.dir==='left') b.x-=15; else if(b.dir==='right') b.x+=15;
-            if(r.mode === 'zombi') {
-                r.zombies.forEach((z, zi) => {
-                    if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) {
-                        r.zombies.splice(zi, 1); r.bullets.splice(bi, 1);
-                    }
-                });
-            }
-            for(let id in r.players) {
-                let t = r.players[id];
-                if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
-                    t.hp -= 1; r.bullets.splice(bi, 1);
-                }
-            }
-            if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
+            d.bullets.forEach(b => { ctx.fillStyle='orange'; ctx.fillRect(b.x, b.y, 8, 8); });
+            d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
-        io.to(n).emit('state', r);
-    }
-}, 50);
 
-http.listen(process.env.PORT || 3000);
+        document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
+    </script>
+</body>
+</html>
