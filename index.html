@@ -3,100 +3,90 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        * { touch-action: none; box-sizing: border-box; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; }
-        canvas { border: 4px solid #4CAF50; background: #333; display: block; margin: 5px auto; width: 320px; height: 320px; border-radius: 8px; }
-        .controls { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .move-grid { display: grid; grid-template-areas: ". up ." "left down right"; gap: 5px; }
-        .btn { width: 60px; height: 60px; background: #444; color: white; border: none; font-size: 24px; border-radius: 12px; font-weight: bold; }
-        .fire-btn { background: #f44336 !important; width: 100px; }
-        #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        input, select { padding: 12px; margin: 10px; width: 220px; border-radius: 8px; }
-        #score-board { font-size: 18px; margin-bottom: 5px; display: none; }
+        canvas { border: 4px solid #4CAF50; background: #333; display: block; margin: 5px auto; width: 320px; height: 320px; }
+        #menu { position: fixed; inset: 0; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; align-items: center; padding: 20px; z-index: 1000; overflow-y: auto; }
+        .room-item { background: #333; padding: 10px; margin: 5px; width: 250px; border-radius: 8px; border: 1px solid #4CAF50; display: flex; justify-content: space-between; align-items: center; }
+        input, select { padding: 12px; margin: 5px; width: 220px; border-radius: 8px; }
+        .btn { padding: 10px; background: #444; color: white; border: none; border-radius: 8px; font-weight: bold; }
+        #player-list { position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.5); padding: 5px; border-radius: 5px; font-size: 12px; text-align: right; }
     </style>
 </head>
 <body>
     <div id="menu">
-        <h2>OSMAN'IN OYUNU</h2>
-        <input type="text" id="name" placeholder="İsim">
+        <h2 style="color:#4CAF50">LOBİ - AÇIK ODALAR</h2>
+        <input type="text" id="name" placeholder="Adın">
+        <hr style="width: 250px; border: 0.5px solid #444">
+        <div id="rooms-container">Oda aranıyor...</div>
+        <hr style="width: 250px; border: 0.5px solid #444">
+        <h3>Yeni Oda Kur</h3>
+        <input type="text" id="newRoomName" placeholder="Oda Adı">
         <select id="mode">
-            <option value="zombi">Zombi (Dalga Sistemi)</option>
+            <option value="zombi">Zombi</option>
             <option value="bayrak">Bayrak Kapmaca</option>
-            <option value="vs">Savaş (VS)</option>
+            <option value="vs">Savaş</option>
         </select>
-        <button class="btn" onclick="start()" style="width:150px; background:#4CAF50">BAŞLA</button>
+        <button class="btn" onclick="createRoom()" style="background:#4CAF50; width: 220px;">ODA KUR VE GİR</button>
     </div>
 
-    <div id="status-bar" style="height: 50px;">
-        <div id="score-board">🔴 Kırmızı: <span id="s-red">0</span> - 🔵 Mavi: <span id="s-blue">0</span></div>
-        <div id="status" style="font-weight:bold; color:#FFD700;">Yükleniyor...</div>
-    </div>
-
+    <div id="player-list"></div>
+    <div id="status-bar" style="font-weight:bold; color:#FFD700; padding: 5px;"></div>
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
-    <div class="controls">
-        <div class="move-grid">
-            <button class="btn" style="grid-area: up" onpointerdown="socket.emit('move','up')">▲</button>
-            <button class="btn" style="grid-area: left" onpointerdown="socket.emit('move','left')">◀</button>
-            <button class="btn" style="grid-area: down" onpointerdown="socket.emit('move','down')">▼</button>
-            <button class="btn" style="grid-area: right" onpointerdown="socket.emit('move','right')">▶</button>
+    <div class="controls" style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+        <div style="display: grid; grid-template-areas: '. up .' 'left down right'; gap: 5px;">
+            <button class="btn" style="grid-area: up; width:60px; height:60px" onpointerdown="socket.emit('move','up')">▲</button>
+            <button class="btn" style="grid-area: left; width:60px; height:60px" onpointerdown="socket.emit('move','left')">◀</button>
+            <button class="btn" style="grid-area: down; width:60px; height:60px" onpointerdown="socket.emit('move','down')">▼</button>
+            <button class="btn" style="grid-area: right; width:60px; height:60px" onpointerdown="socket.emit('move','right')">▶</button>
         </div>
         <div style="display:flex; gap:10px">
-            <button class="btn fire-btn" onpointerdown="socket.emit('fire')">🔥</button>
-            <button class="btn" style="background:#ff9800; width:80px;" onpointerdown="socket.emit('specialPower')">B</button>
+            <button class="btn" style="background:#f44336; width:80px; height:60px" onpointerdown="socket.emit('fire')">🔥</button>
+            <button class="btn" style="background:#ff9800; width:80px; height:60px" onpointerdown="socket.emit('specialPower')">B</button>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io(); const ctx = document.getElementById('gameCanvas').getContext('2d');
-        let effect = null;
-        
-        function start() { 
-            socket.emit('createRoom', {userName: document.getElementById('name').value, mode: document.getElementById('mode').value}); 
-            document.getElementById('menu').style.display='none'; 
+        function createRoom() {
+            let u = document.getElementById('name').value;
+            let r = document.getElementById('newRoomName').value;
+            let m = document.getElementById('mode').value;
+            if(!u || !r) return alert("Ad ve Oda adı gir!");
+            socket.emit('createRoom', {userName: u, roomName: r, mode: m});
+            document.getElementById('menu').style.display='none';
         }
-
-        socket.on('gameOver', (d) => { alert((d.winner === 'red' ? "KIRMIZI" : "MAVİ") + " TAKIM KAZANDI!"); });
-
-        socket.on('specialEffect', d => { 
-            effect = {x: d.x, y: d.y, r: 0, opacity: 1};
-            let anim = setInterval(() => { effect.r += 10; effect.opacity -= 0.1; if(effect.r > 100) { clearInterval(anim); effect = null; } }, 20);
+        function joinRoom(rName) {
+            let u = document.getElementById('name').value;
+            if(!u) return alert("Önce adını yaz!");
+            socket.emit('createRoom', {userName: u, roomName: rName});
+            document.getElementById('menu').style.display='none';
+        }
+        socket.on('roomList', list => {
+            let container = document.getElementById('rooms-container');
+            container.innerHTML = list.length === 0 ? "Açık oda yok, ilkini sen kur!" : "";
+            list.forEach(r => {
+                container.innerHTML += `<div class="room-item">
+                    <span><b>${r.name}</b> (${r.count} Kişi - ${r.mode})</span>
+                    <button class="btn" onclick="joinRoom('${r.name}')" style="background:#4CAF50; padding:5px 10px;">KATIL</button>
+                </div>`;
+            });
         });
-
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400);
-
-            // SKOR TABLOSU GÜNCELLEME
-            if (d.mode === 'bayrak') {
-                document.getElementById('score-board').style.display = 'block';
-                document.getElementById('s-red').innerText = d.scores.red;
-                document.getElementById('s-blue').innerText = d.scores.blue;
-                
-                // Duvarlar ve Bayraklar
-                ctx.fillStyle = "#777"; d.walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
-                if (!d.flags.red.taken) { ctx.fillStyle = "red"; ctx.fillRect(d.flags.red.x, d.flags.red.y, 20, 20); }
-                if (!d.flags.blue.taken) { ctx.fillStyle = "blue"; ctx.fillRect(d.flags.blue.x, d.flags.blue.y, 20, 20); }
-            } else {
-                document.getElementById('score-board').style.display = 'none';
-            }
-
-            if(effect) { ctx.beginPath(); ctx.arc(effect.x, effect.y, effect.r, 0, Math.PI*2); ctx.strokeStyle=`rgba(0, 255, 255, ${effect.opacity})`; ctx.lineWidth=8; ctx.stroke(); }
-            
-            (d.bullets||[]).forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,10,10); });
-            (d.zombies||[]).forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x,z.y,25,25); });
-            
+            let pList = "";
             for(let id in d.players) {
-                let p = d.players[id]; 
+                let p = d.players[id];
+                pList += `<div>${p.name} [${p.team}]</div>`;
                 ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25);
-                if(p.hasFlag) { ctx.fillStyle = "gold"; ctx.beginPath(); ctx.arc(p.x+12, p.y-10, 8, 0, Math.PI*2); ctx.fill(); }
-                
-                if(id===socket.id) {
-                    // CAN GÖSTERGESİ (EKSİYE DÜŞMEZ)
-                    let displayHp = Math.max(0, Math.ceil(p.hp));
-                    document.getElementById('status').innerText = (d.mode==='zombi' ? "Dalga: "+d.wave+" | " : "") + "Can: " + displayHp;
-                }
+                if(id===socket.id) document.getElementById('status').innerText = "Can: " + Math.ceil(p.hp);
             }
+            document.getElementById('player-list').innerHTML = pList; // Kimlerin katıldığını gör
+            if(d.mode==='bayrak'){ ctx.fillStyle="#777"; d.walls.forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h)); }
+            (d.bullets||[]).forEach(b=>{ ctx.fillStyle="yellow"; ctx.fillRect(b.x,b.y,10,10); });
+            (d.zombies||[]).forEach(z=>{ ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x,z.y,25,25); });
         });
     </script>
 </body>
