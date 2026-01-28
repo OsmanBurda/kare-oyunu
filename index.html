@@ -3,24 +3,40 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        /* Zoom Koruması: Tüm ekran için dokunma eylemlerini kısıtla */
         * { touch-action: none !important; user-select: none !important; -webkit-tap-highlight-color: transparent; }
-        body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+        body { background: #111; color: white; text-align: center; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; font-family: sans-serif; }
+        
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
-        /* İşaretlediğin Panelin Stili */
+        
         #infoPanel { 
-            width: 320px; min-height: 60px; background: #222; margin: 5px auto; 
+            width: 320px; min-height: 50px; background: #222; margin: 5px auto; 
             border-radius: 10px; display: flex; flex-direction: column; justify-content: center; border: 1px solid #444;
-            pointer-events: none; /* Panele tıklamayı engeller, zoom yapamazsın */
+            pointer-events: none; /* Panele tıklayıp zoom yapmayı engeller */
         }
+
         .stats { display: flex; justify-content: space-around; font-weight: bold; font-size: 14px; }
-        .controls { position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-around; align-items: center; }
-        .ctrl-btn { width: 65px; height: 65px; background: #333; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: 2px solid #555; }
-        .fire { background: #900 !important; width: 85px; height: 85px; }
+
+        /* Fotoğraftaki Yerleşim */
+        .controls-wrapper { position: absolute; bottom: 20px; width: 100%; height: 160px; pointer-events: none; }
+        .controls-wrapper > * { pointer-events: auto; }
+
+        .d-pad { position: absolute; left: 20px; bottom: 0; display: grid; grid-template-areas: ". u ." "l d r"; gap: 10px; }
+        .action-pad { position: absolute; right: 20px; bottom: 0; display: flex; flex-direction: column; gap: 15px; align-items: center; }
+
+        .ctrl-btn { 
+            width: 65px; height: 65px; background: rgba(255,255,255,0.15); 
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+            font-size: 24px; border: 2px solid #555; color: white;
+        }
+        
+        .btn-b { background: blue !important; width: 60px; height: 60px; border-color: #0044ff; }
+        .btn-fire { background: rgba(200, 0, 0, 0.6) !important; width: 85px; height: 85px; border-color: #ff0000; font-size: 32px; }
+
+        .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     </style>
 </head>
-<body oncontextmenu="return false;">
-    <div id="gameOverlay" style="position:fixed; inset:0; background:rgba(0,0,0,0.95); z-index:100; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+<body>
+    <div id="gameOverlay" class="overlay">
         <h2>OSMAN OYUN</h2>
         <input type="text" id="nameInput" placeholder="İsmin" style="padding:10px; margin-bottom:10px;">
         <select id="modeSelect" style="padding:10px; margin-bottom:10px;">
@@ -28,30 +44,32 @@
             <option value="zombi">ZOMBİ</option>
             <option value="bayrak">BAYRAK</option>
         </select>
-        <button onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})" style="padding:15px; width:200px; background:#4CAF50; color:white; border:none; border-radius:10px;">OYNA</button>
+        <button onclick="socket.emit('createRoom', {mode: document.getElementById('modeSelect').value, userName: document.getElementById('nameInput').value})" style="padding:15px; width:200px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">BAŞLA</button>
     </div>
 
-    <div id="hpDisplay" style="color:#4CAF50; font-weight:bold; margin-top:5px;">CAN: -</div>
+    <div id="hpDisplay" style="color:#4CAF50; font-weight:bold; margin-top:5px; height: 20px;">CAN: -</div>
+    
     <canvas id="gameCanvas" width="400" height="400"></canvas>
 
     <div id="infoPanel">
         <div class="stats" id="statsRow">
+            <span>MOD: -</span>
             <span>SKOR: 0-0</span>
-            <span>DALGA: 1</span>
         </div>
-        <div id="winner" style="color:gold; font-weight:bold; margin-top:5px;"></div>
+        <div id="winner" style="color:gold; font-weight:bold; font-size:12px;"></div>
     </div>
 
-    <div class="controls">
-        <div style="display:grid; grid-template-areas:'. u .' 'l d r'; gap:8px;">
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','up')">▲</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','left')">◀</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','down')">▼</div>
-            <div class="ctrl-btn" ontouchstart="socket.emit('move','right')">▶</div>
+    <div class="controls-wrapper">
+        <div class="d-pad">
+            <div class="ctrl-btn" style="grid-area:u" ontouchstart="socket.emit('move','up')">▲</div>
+            <div class="ctrl-btn" style="grid-area:l" ontouchstart="socket.emit('move','left')">◀</div>
+            <div class="ctrl-btn" style="grid-area:d" ontouchstart="socket.emit('move','down')">▼</div>
+            <div class="ctrl-btn" style="grid-area:r" ontouchstart="socket.emit('move','right')">▶</div>
         </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
-            <div class="ctrl-btn" style="background:blue;" ontouchstart="socket.emit('specialPower')">B</div>
-            <div class="ctrl-btn fire" ontouchstart="socket.emit('fire')">🔥</div>
+
+        <div class="action-pad">
+            <div class="ctrl-btn btn-b" ontouchstart="socket.emit('specialPower')">B</div>
+            <div class="ctrl-btn btn-fire" ontouchstart="socket.emit('fire')">🔥</div>
         </div>
     </div>
 
@@ -86,7 +104,7 @@
             d.zombies.forEach(z => { ctx.fillStyle='#2ecc71'; ctx.fillRect(z.x, z.y, 25, 25); });
         });
 
-        // ZOOM KİLİDİ: Çift dokunmayı ve çoklu parmağı her yerde engelle
+        // ZOOM KİLİDİ
         document.addEventListener('touchstart', e => { if(e.touches.length > 1) e.preventDefault(); }, {passive: false});
         let lastT = 0;
         document.addEventListener('touchend', e => {
