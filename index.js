@@ -23,13 +23,12 @@ io.on('connection', (socket) => {
     function joinProcess(socket, rName, uName) {
         socket.join(rName); socket.roomName = rName;
         let r = rooms[rName];
-        // KALICI HP AYARLARI
         let hpVal = (r.mode === 'zombi' ? 10 : (r.mode === 'savas' ? 3 : 1));
         let team = Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue';
         r.players[socket.id] = { 
             x: team === 'red' ? 50 : 330, y: team === 'red' ? 50 : 330, 
             name: uName || "Osman", color: team, team: team,
-            hp: hpVal, maxHp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
+            hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
         };
         socket.emit('joined');
     }
@@ -37,7 +36,6 @@ io.on('connection', (socket) => {
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        // KALICI KURAL: B gücü sadece zombi modunda çalışır
         if(r.mode === 'zombi' && p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
             io.to(socket.roomName).emit('blastEffect', {x: p.x+12, y: p.y+12});
@@ -48,7 +46,7 @@ io.on('connection', (socket) => {
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
-        let cd = (r.mode === 'savas' ? 1000 : 250); // SAVAŞ MODU 1 SN COOLDOWN
+        let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
             if(r.mode === 'bayrak') {
                 ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
@@ -68,17 +66,6 @@ io.on('connection', (socket) => {
         if (dir === 'left' && p.x > 0) p.x -= s;
         if (dir === 'right' && p.x < 375) p.x += s;
         p.lastDir = dir;
-
-        if(r.mode === 'bayrak') {
-            let enemyTeam = p.team === 'red' ? 'blue' : 'red';
-            let ef = r.flags[enemyTeam];
-            if(!p.hasFlag && Math.hypot(p.x - ef.x, p.y - ef.y) < 30) p.hasFlag = true;
-            let mf = r.flags[p.team];
-            if(p.hasFlag && Math.hypot(p.x - mf.x, p.y - mf.y) < 30) {
-                r.scores[p.team]++; p.hasFlag = false;
-                if(r.scores[p.team] >= 3) r.winner = p.team.toUpperCase();
-            }
-        }
     });
 });
 
@@ -87,7 +74,7 @@ setInterval(() => {
         let r = rooms[n];
         if(r.mode === 'zombi' && !r.winner) {
             if(Date.now() - r.lastWaveTime > 20000) { r.wave++; r.lastWaveTime = Date.now(); }
-            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0, hp: 1});
+            if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0});
             r.zombies.forEach((z) => {
                 let targets = Object.values(r.players).filter(p => p.hp > 0);
                 if(targets[0]) {
