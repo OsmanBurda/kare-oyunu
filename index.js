@@ -37,7 +37,6 @@ io.on('connection', (socket) => {
         let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastBlast > 5000) { 
-            // B Gücü: Yakındaki zombileri temizler
             r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 130);
             p.lastBlast = Date.now();
         }
@@ -48,7 +47,12 @@ io.on('connection', (socket) => {
         let p = r.players[socket.id];
         let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
-            r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
+            // Bayrak modunda 4 yöne ateş özelliği eklendi
+            if(r.mode === 'bayrak') {
+                ['up','down','left','right'].forEach(d => r.bullets.push({x: p.x+8, y: p.y+8, dir: d, owner: socket.id}));
+            } else {
+                r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
+            }
             p.lastFire = Date.now();
         }
     });
@@ -79,27 +83,19 @@ io.on('connection', (socket) => {
 setInterval(() => {
     for(let n in rooms) {
         let r = rooms[n];
-        
-        // Zombi Ölüm ve Dalga Kontrolü
         if(r.mode === 'zombi' && !r.winner) {
             if(Date.now() - r.lastWaveTime > 20000) { r.wave++; r.lastWaveTime = Date.now(); }
             if(r.zombies.length < 3 + r.wave) r.zombies.push({x: Math.random()*375, y: 0, hp: 1});
-            
-            r.zombies.forEach((z, zi) => {
+            r.zombies.forEach((z) => {
                 let targets = Object.values(r.players).filter(p => p.hp > 0);
                 if(targets[0]) {
-                    let spd = 0.8;
-                    z.x += (z.x < targets[0].x ? spd : -spd); z.y += (z.y < targets[0].y ? spd : -spd);
+                    z.x += (z.x < targets[0].x ? 0.8 : -0.8); z.y += (z.y < targets[0].y ? 0.8 : -0.8);
                     if(Math.hypot(z.x-targets[0].x, z.y-targets[0].y) < 20) targets[0].hp -= 0.05;
                 }
             });
         }
-
-        // Mermi Hareket ve Çarpışma (Zombi & Oyuncu)
         r.bullets.forEach((b, bi) => {
             if(b.dir==='up') b.y-=15; else if(b.dir==='down') b.y+=15; else if(b.dir==='left') b.x-=15; else if(b.dir==='right') b.x+=15;
-            
-            // Zombi Vurma
             if(r.mode === 'zombi') {
                 r.zombies.forEach((z, zi) => {
                     if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) {
@@ -107,15 +103,12 @@ setInterval(() => {
                     }
                 });
             }
-
-            // Oyuncu Vurma
             for(let id in r.players) {
                 let t = r.players[id];
                 if(id !== b.owner && t.hp > 0 && b.x < t.x+25 && b.x+8 > t.x && b.y < t.y+25 && b.y+8 > t.y) {
                     t.hp -= 1; r.bullets.splice(bi, 1);
                 }
             }
-
             if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi, 1);
         });
         io.to(n).emit('state', r);
