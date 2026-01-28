@@ -10,10 +10,10 @@ let rooms = {};
 
 io.on('connection', (socket) => {
     socket.on('createRoom', (data) => {
-        const rName = data.roomName || "Oda_" + Math.floor(Math.random()*1000);
+        const rName = data.roomName || "OsmanOda";
         rooms[rName] = { 
             players: {}, bullets: [], zombies: [], mode: data.mode, 
-            status: 'lobby', leader: socket.id,
+            status: 'playing', // Hemen başlasın diye düzelttim
             flags: { red: {x: 20, y: 20}, blue: {x: 360, y: 360} },
             scores: { red: 0, blue: 0 }
         };
@@ -30,11 +30,11 @@ io.on('connection', (socket) => {
             name: uName || "Osman", color: team, team: team,
             hp: hpVal, lastFire: 0, lastBlast: 0, lastDir: 'up', hasFlag: false 
         };
-        socket.emit('joined', { isLeader: (r.leader === socket.id) });
+        socket.emit('joined');
     }
 
     socket.on('specialPower', () => {
-        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastBlast > 3000) { 
             if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
@@ -43,9 +43,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('fire', () => {
-        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let r = rooms[socket.roomName]; if(!r || r.mode === 'bayrak') return;
         let p = r.players[socket.id];
-        if(r.mode === 'bayrak') return; // Bayrak modunda ateş yok
         let cd = (r.mode === 'savas' ? 1000 : 250);
         if(p && p.hp > 0 && Date.now() - p.lastFire > cd) {
             r.bullets.push({x: p.x+8, y: p.y+8, dir: p.lastDir, owner: socket.id});
@@ -54,33 +53,31 @@ io.on('connection', (socket) => {
     });
 
     socket.on('move', (dir) => {
-        let r = rooms[socket.roomName]; if(!r || r.status !== 'playing') return;
+        let r = rooms[socket.roomName]; if(!r) return;
         let p = r.players[socket.id]; if(!p || p.hp <= 0) return;
-        let speed = 20;
-        if (dir === 'up' && p.y > 0) p.y -= speed;
-        if (dir === 'down' && p.y < 375) p.y += speed;
-        if (dir === 'left' && p.x > 0) p.x -= speed;
-        if (dir === 'right' && p.x < 375) p.x += speed;
+        let s = 20;
+        if (dir === 'up' && p.y > 0) p.y -= s;
+        if (dir === 'down' && p.y < 375) p.y += s;
+        if (dir === 'left' && p.x > 0) p.x -= s;
+        if (dir === 'right' && p.x < 375) p.x += s;
         p.lastDir = dir;
 
         if(r.mode === 'bayrak') {
             let enemyTeam = p.team === 'red' ? 'blue' : 'red';
-            let enemyFlag = r.flags[enemyTeam];
-            if(!p.hasFlag && Math.hypot(p.x - enemyFlag.x, p.y - enemyFlag.y) < 30) p.hasFlag = true;
-            let myBase = r.flags[p.team];
-            if(p.hasFlag && Math.hypot(p.x - myBase.x, p.y - myBase.y) < 30) {
+            let ef = r.flags[enemyTeam];
+            if(!p.hasFlag && Math.hypot(p.x - ef.x, p.y - ef.y) < 30) p.hasFlag = true;
+            let mf = r.flags[p.team];
+            if(p.hasFlag && Math.hypot(p.x - mf.x, p.y - mf.y) < 30) {
                 r.scores[p.team]++; p.hasFlag = false;
-                if(r.scores[p.team] >= 3) { r.status = 'finished'; io.to(socket.roomName).emit('gameOver', p.team); }
+                if(r.scores[p.team] >= 3) { r.scores = {red:0, blue:0}; } // Maç sıfırlansın
             }
         }
     });
-
-    socket.on('startGameSignal', () => { if(rooms[socket.roomName]) rooms[socket.roomName].status = 'playing'; io.to(socket.roomName).emit('gameStarted'); });
 });
 
 setInterval(() => {
     for(let n in rooms) {
-        let r = rooms[n]; if(r.status !== 'playing') continue;
+        let r = rooms[n];
         if(r.mode === 'zombi') {
             if(r.zombies.length < 5) r.zombies.push({x: Math.random()*375, y: 0, hp: 2});
             r.zombies.forEach((z, zi) => {
