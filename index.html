@@ -3,7 +3,6 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        /* ... (Önceki CSS'ler aynı) ... */
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; touch-action: manipulation; }
         body { background: #1a1a1a; color: white; text-align: center; margin: 0; font-family: sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         canvas { border: 4px solid #4CAF50; background: #eee; width: 320px; height: 320px; display: block; margin: 5px auto; border-radius: 8px; }
@@ -11,11 +10,10 @@
         .btn { padding: 12px; background: #4CAF50; color: white; border: none; border-radius: 8px; margin: 5px; width: 220px; font-weight: bold; cursor: pointer; }
         .room-item { background: #444; padding: 10px; margin: 5px; border-radius: 8px; width: 220px; display: flex; justify-content: space-between; align-items: center; }
         .join-btn { background: #2196F3; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-        /* ... (Diğer stiller aynı) ... */
         .help-panel { background: #333; padding: 10px; border-radius: 8px; font-size: 13px; text-align: left; width: 250px; margin-bottom: 10px; border-left: 4px solid #ff9800; }
         .controls-container { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 10px; }
         .row { display: flex; gap: 12px; }
-        .ctrl-btn { width: 60px; height: 60px; background: #444; border-radius: 12px; color: white; border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; }
+        .ctrl-btn { width: 60px; height: 60px; background: #444; border-radius: 12px; color: white; border: none; font-size: 24px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
         .fire-btn { background: #ff4444 !important; width: 80px; }
         .special-btn { background: #ff9800 !important; color: black !important; width: 80px; font-size: 32px; border: 3px solid white; box-shadow: 0 0 15px #ff9800; }
     </style>
@@ -24,18 +22,19 @@
     <div id="gameOverlay" class="overlay">
         <h2>KARE OYUNLARI</h2>
         <div class="help-panel">
-            <b>KURALLAR:</b><br>
-            • Savaş: 3 Can | Zombi: Dalga Sistemi | Labirent: 🏆'ya ulaş!
+            <b>NASIL OYNANIR:</b><br>
+            • <b>Zombi:</b> Merkezde doğarsın, B tuşuyla alan hasarı at!<br>
+            • <b>Savaş:</b> Herkes tek! 3 canın var.<br>
+            • <b>Labirent:</b> Savaşma, çıkıştaki 🏆'ya ulaş!
         </div>
         <input type="text" id="nameInput" placeholder="İsim..." style="padding:10px; width:220px; margin:5px; border-radius:8px;">
-        <input type="text" id="roomNameInput" placeholder="Yeni Oda Adı" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
+        <input type="text" id="roomNameInput" placeholder="Oda Adı" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
         <select id="modeSelect" style="padding:10px; width:220px; margin:5px; border-radius:8px;">
             <option value="zombi">Zombi Modu</option>
             <option value="savas">Savaş Modu</option>
             <option value="labirent">Labirent Modu</option>
         </select>
         <button class="btn" onclick="createRoom()">ODA KUR</button>
-        
         <hr style="width: 220px; border: 1px solid #555; margin: 15px;">
         <h4>AKTİF ODALAR</h4>
         <div id="roomListContainer">Oda bulunamadı...</div>
@@ -59,16 +58,9 @@
         const socket = io(); const canvas = document.getElementById('gameCanvas'); const ctx = canvas.getContext('2d');
         let currentEffect = null; let gameMode = '';
 
-        // Oda Listesini Al ve Yazdır
         socket.on('roomList', (rooms) => {
             const container = document.getElementById('roomListContainer');
-            if (rooms.length === 0) { container.innerHTML = "Oda bulunamadı..."; return; }
-            container.innerHTML = rooms.map(name => `
-                <div class="room-item">
-                    <span>${name}</span>
-                    <button class="join-btn" onclick="joinRoom('${name}')">GİR</button>
-                </div>
-            `).join("");
+            container.innerHTML = rooms.length === 0 ? "Oda bulunamadı..." : rooms.map(n => `<div class="room-item"><span>${n}</span><button class="join-btn" onclick="joinRoom('${n}')">GİR</button></div>`).join("");
         });
 
         function createRoom() { socket.emit('createRoom', { roomName: document.getElementById('roomNameInput').value, userName: document.getElementById('nameInput').value, mode: document.getElementById('modeSelect').value }); }
@@ -78,13 +70,17 @@
             gameMode = d.mode; document.getElementById('gameOverlay').style.display='none'; document.getElementById('lobby').style.display='flex'; 
             if(d.isLeader) document.getElementById('sBtn').style.display='block';
             document.getElementById('fireBtn').style.display = (gameMode === 'labirent' ? 'none' : 'flex');
-            document.getElementById('specialBtn').style.display = (gameMode === 'labirent' || gameMode === 'savas' ? 'none' : 'flex');
+            document.getElementById('specialBtn').style.display = (gameMode === 'zombi' ? 'flex' : 'none');
         });
         
-        socket.on('updatePlayerList', d => { document.getElementById('playerList').innerHTML = d.players.map(p => `<div>• ${p.name}</div>`).join(""); });
-        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
         socket.on('winner', m => { alert(m); location.reload(); });
-        socket.on('specialEffect', d => { currentEffect = {x: d.x, y: d.y, r: 0}; const anim = setInterval(() => { if(currentEffect) currentEffect.r += 10; if(currentEffect && currentEffect.r > 100) { clearInterval(anim); currentEffect = null; } }, 30); });
+        socket.on('gameStarted', () => document.getElementById('lobby').style.display='none');
+        socket.on('updatePlayerList', d => { document.getElementById('playerList').innerHTML = d.players.map(p => `<div>• ${p.name}</div>`).join(""); });
+
+        socket.on('specialEffect', d => { 
+            currentEffect = {x: d.x, y: d.y, r: 0}; 
+            const anim = setInterval(() => { if(currentEffect) currentEffect.r += 20; if(currentEffect && currentEffect.r > 180) { clearInterval(anim); currentEffect = null; } }, 15); 
+        });
 
         socket.on('state', d => {
             ctx.clearRect(0,0,400,400); ctx.fillStyle="#333"; (d.walls||[]).forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h));
@@ -95,7 +91,7 @@
             for(let id in d.players){ 
                 let p = d.players[id]; if(p.hp > 0) { 
                     ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,25,25); 
-                    if(id===socket.id) document.getElementById('status').innerText = (d.mode==='labirent' ? "Çıkışa Koş!" : (d.mode==='zombi' ? `Dalga: ${d.wave} | Can: ${Math.ceil(p.hp)}` : `Can: ${p.hp}`));
+                    if(id===socket.id) document.getElementById('status').innerText = (d.mode==='zombi' ? `Dalga: ${d.wave} | Can: ${Math.ceil(p.hp)}` : `Can: ${p.hp}`);
                 } 
             }
         });
@@ -104,7 +100,7 @@
             const keys = { w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
             if(keys[e.key]) socket.emit('move', keys[e.key]);
             if(e.code === 'Space' && gameMode !== 'labirent') socket.emit('fire');
-            if(e.key.toLowerCase() === 'b' && gameMode !== 'savas' && gameMode !== 'labirent') socket.emit('specialPower');
+            if(e.key.toLowerCase() === 'b' && gameMode === 'zombi') socket.emit('specialPower');
         });
     </script>
 </body>
