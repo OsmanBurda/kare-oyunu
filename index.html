@@ -6,41 +6,44 @@
         * { touch-action: none; box-sizing: border-box; }
         body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         #menu { position: fixed; inset: 0; background: #1a1a1a; z-index: 1000; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; display: block; margin: 10px auto; border-radius: 8px; }
+        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; display: none; margin: 10px auto; border-radius: 8px; }
         .room-box { background: #333; padding: 10px; margin: 5px; border-radius: 8px; width: 260px; display: flex; justify-content: space-between; border-left: 5px solid #4CAF50; }
         .btn { padding: 15px; border-radius: 10px; border: none; font-weight: bold; color: white; background: #444; }
-        .ctrl-btn { width: 65px; height: 65px; font-size: 24px; }
-        #ui-layer { font-size: 18px; color: #FFD700; height: 35px; display: flex; justify-content: center; align-items: center; }
+        #start-panel { display: none; margin-top: 20px; }
+        #ui-layer { display: none; font-size: 18px; color: #FFD700; padding: 10px; }
+        #controls { display: none; flex-direction: column; align-items: center; gap: 5px; }
     </style>
 </head>
 <body>
     <div id="menu">
-        <h2 style="color:#4CAF50">LOBİ SİSTEMİ</h2>
+        <h2 style="color:#4CAF50">LOBİ</h2>
         <input type="text" id="uname" placeholder="Adın" style="padding:12px; width:240px; margin-bottom:10px;">
         <div id="roomList" style="margin: 10px 0; max-height: 150px; overflow-y: auto;"></div>
-        <input type="text" id="rname" placeholder="Oda Adı" style="padding:12px; width:240px; margin-top:10px;">
+        <input type="text" id="rname" placeholder="Oda Adı" style="padding:12px; width:240px;">
         <select id="mode" style="padding:12px; width:240px; margin: 10px;">
-            <option value="zombi">Zombi Modu (Hız 0.5)</option>
+            <option value="zombi">Zombi Modu</option>
             <option value="bayrak">Bayrak Kapmaca</option>
             <option value="vs">Savaş (VS)</option>
         </select>
-        <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; border:none; color:white; font-weight:bold;">OYUNA GİR</button>
+        <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; color:white;">ODA KUR</button>
+    </div>
+
+    <div id="start-panel">
+        <h3 id="wait-msg">Kurucu bekleniyor...</h3>
+        <button id="start-btn" onclick="socket.emit('startGame')" style="background:#4CAF50; padding:20px; border-radius:10px; display:none;">OYUNU BAŞLAT</button>
     </div>
 
     <div id="ui-layer">Can: 10</div>
     <canvas id="game" width="400" height="400"></canvas>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 5px;">
+    <div id="controls">
         <div style="display: grid; grid-template-areas: '. u .' 'l d r'; gap: 5px;">
-            <button class="btn ctrl-btn" style="grid-area: u" onpointerdown="socket.emit('move','up')">▲</button>
-            <button class="btn ctrl-btn" style="grid-area: l" onpointerdown="socket.emit('move','left')">◀</button>
-            <button class="btn ctrl-btn" style="grid-area: d" onpointerdown="socket.emit('move','down')">▼</button>
-            <button class="btn ctrl-btn" style="grid-area: r" onpointerdown="socket.emit('move','right')">▶</button>
+            <button class="btn" style="grid-area: u; width:60px; height:60px" onpointerdown="socket.emit('move','up')">▲</button>
+            <button class="btn" style="grid-area: l; width:60px; height:60px" onpointerdown="socket.emit('move','left')">◀</button>
+            <button class="btn" style="grid-area: d; width:60px; height:60px" onpointerdown="socket.emit('move','down')">▼</button>
+            <button class="btn" style="grid-area: r; width:60px; height:60px" onpointerdown="socket.emit('move','right')">▶</button>
         </div>
-        <div style="display:flex; gap:10px;">
-            <button class="btn" style="background:#f44336; width:90px; height:60px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
-            <button class="btn" style="background:#ff9800; width:70px; height:60px;" onpointerdown="socket.emit('specialPower')">B</button>
-        </div>
+        <button class="btn" style="background:#f44336; width:150px; height:60px; margin-top:10px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
@@ -52,42 +55,59 @@
             const u = document.getElementById('uname').value;
             const r = nameFromList || document.getElementById('rname').value;
             const m = document.getElementById('mode').value;
-            if(!u || !r) return alert("Ad ve Oda Adı gerekli!");
+            if(!u || !r) return alert("Ad ve Oda Adı!");
             socket.emit('createRoom', {userName: u, roomName: r, mode: m});
             document.getElementById('menu').style.display = 'none';
+            document.getElementById('start-panel').style.display = 'block';
         }
 
         socket.on('roomList', list => {
             const container = document.getElementById('roomList');
-            container.innerHTML = list.length === 0 ? "Açık oda yok." : "";
+            container.innerHTML = "";
             list.forEach(room => {
-                container.innerHTML += `<div class="room-box">
-                    <span><b>${room.name}</b> (${room.mode})</span>
-                    <button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; padding:5px 10px; border-radius:5px;">GİR</button>
-                </div>`;
+                if(!room.started) {
+                    container.innerHTML += `<div class="room-box">
+                        <span><b>${room.name}</b></span>
+                        <button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; border-radius:5px;">GİR</button>
+                    </div>`;
+                }
             });
+        });
+
+        socket.on('joined', d => {
+            if(d.isHost) {
+                document.getElementById('start-btn').style.display = 'block';
+                document.getElementById('wait-msg').innerText = "Odayı kurdun, başlatman bekleniyor.";
+            }
+        });
+
+        socket.on('gameStarted', () => {
+            document.getElementById('start-panel').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('ui-layer').style.display = 'flex';
+            document.getElementById('controls').style.display = 'flex';
+        });
+
+        socket.on('gameOver', d => {
+            alert(d.msg);
+            location.reload(); // Herkesi en başa (menüye) atar
         });
 
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400);
-            
             if(r.mode === 'bayrak') {
                 ctx.fillStyle = "#555"; WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
                 if(!r.flags.red.taken) { ctx.fillStyle="red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 20, 20); }
                 if(!r.flags.blue.taken) { ctx.fillStyle="blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 20, 20); }
                 document.getElementById('ui-layer').innerText = `🔴 ${r.scores.red} - ${r.scores.blue} 🔵`;
             }
-
             r.bullets.forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             r.zombies.forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x, z.y, 25, 25); });
-
             for(let id in r.players) {
                 let p = r.players[id];
                 ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
                 if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12, p.y-10, 8, 0, Math.PI*2); ctx.fill(); }
-                if(id === socket.id && r.mode !== 'bayrak') {
-                    document.getElementById('ui-layer').innerText = (r.mode==='zombi' ? `Dalga: ${r.wave-1} | ` : "") + `Can: ${Math.max(0, Math.ceil(p.hp))}`;
-                }
+                if(id === socket.id && r.mode !== 'bayrak') document.getElementById('ui-layer').innerText = `Can: ${Math.max(0, Math.ceil(p.hp))}`;
             }
         });
     </script>
