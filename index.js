@@ -10,6 +10,15 @@ app.get('/', (req, res) => { res.sendFile(path.join(__dirname, 'index.html')); }
 let rooms = {};
 const WALLS = [{x: 60, y: 100, w: 20, h: 200}, {x: 320, y: 100, w: 20, h: 200}];
 
+// Kenarlarda rastgele yer belirleme fonksiyonu (Ortayı boş bırakır)
+function getZombieSpawn() {
+    const side = Math.floor(Math.random() * 4); // 0:Üst, 1:Alt, 2:Sol, 3:Sağ
+    if (side === 0) return { x: Math.random() * 400, y: -20 };
+    if (side === 1) return { x: Math.random() * 400, y: 400 };
+    if (side === 2) return { x: -20, y: Math.random() * 400 };
+    return { x: 400, y: Math.random() * 400 };
+}
+
 io.on('connection', (socket) => {
     const sendLobby = () => {
         io.emit('roomList', Object.keys(rooms).map(name => ({
@@ -31,16 +40,13 @@ io.on('connection', (socket) => {
         let r = rooms[rName];
         let team = (r.mode === 'bayrak' || r.mode === 'vs') ? (Object.keys(r.players).length % 2 === 0 ? 'red' : 'blue') : 'solo';
         
-        // CAN AYARLARI: Savaş 3, Zombi 10, Bayrak 1
-        let initialHP = 1;
-        if(r.mode === 'vs') initialHP = 3;
-        if(r.mode === 'zombi') initialHP = 10;
+        let initialHP = (r.mode === 'vs' ? 3 : (r.mode === 'zombi' ? 10 : 1));
 
         socket.join(rName);
         socket.roomName = rName;
         r.players[socket.id] = { 
             id: socket.id, x: (team==='red'?40:340), y: 190, hp: initialHP, maxHP: initialHP,
-            name: data.userName || "Osman", color: (team === 'red' ? 'red' : 'blue'), 
+            name: data.userName || "Oyuncu", color: (team === 'red' ? 'red' : 'blue'), 
             team: team, hasFlag: false, lastFire: 0, lastDir: 'up', lastSpecial: 0, lastHit: 0
         };
         socket.emit('joined', { mode: r.mode, room: rName, isHost: (r.host === socket.id) });
@@ -71,7 +77,7 @@ io.on('connection', (socket) => {
             if(dir==='left') nx -= speed; if(dir==='right') nx += speed;
             let hitWall = false;
             if(r.mode === 'bayrak') WALLS.forEach(w => { if(nx<w.x+w.w && nx+20>w.x && ny<w.y+w.h && ny+20>w.y) hitWall = true; });
-            if(!hitWall) { p.x = Math.max(0, Math.min(380, nx)); p.y = Math.max(0, Math.min(380, ny)); }
+            if(!hitWall) { p.x = Math.max(0, Math.min(370, nx)); p.y = Math.max(0, Math.min(370, ny)); }
         }
     });
 
@@ -106,7 +112,7 @@ io.on('connection', (socket) => {
 
             if(r.mode === 'zombi') {
                 if(r.zombies.length === 0) {
-                    for(let i=0; i<r.wave*3; i++) r.zombies.push({x: Math.random()*400, y: 0});
+                    for(let i=0; i<r.wave*4; i++) r.zombies.push(getZombieSpawn());
                     r.wave++;
                 }
                 r.zombies.forEach(z => {
@@ -127,7 +133,7 @@ io.on('connection', (socket) => {
                     if(!p.hasFlag && !r.flags[enemy].taken && Math.hypot(p.x-r.flags[enemy].x, p.y-r.flags[enemy].y)<25) {
                         p.hasFlag = true; r.flags[enemy].taken = true;
                     }
-                    let base = p.team === 'red' ? {x:30, y:190} : {x:350, y:190};
+                    let base = (p.team === 'red' ? {x:30, y:190} : {x:350, y:190});
                     if(p.hasFlag && Math.hypot(p.x-base.x, p.y-base.y)<30) {
                         p.hasFlag = false; r.flags[enemy].taken = false; r.scores[p.team]++;
                         if(r.scores[p.team] >= 3) { io.to(n).emit('gameOver', { msg: p.team.toUpperCase() + " KAZANDI!" }); delete rooms[n]; }
@@ -137,12 +143,8 @@ io.on('connection', (socket) => {
 
             Object.values(r.players).forEach(p => {
                 if(p.hp <= 0) {
-                    if(r.mode === 'zombi') { io.to(n).emit('gameOver', { msg: "Öldün! Zombiler kazandı." }); delete rooms[n]; }
-                    else { 
-                        p.hp = p.maxHP; // VS ve Bayrak modunda respawn
-                        p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag=false;
-                        if(r.mode === 'bayrak') { /* Bayrak modunda ölürse karşı takımın bayrağını bırakır */ }
-                    }
+                    if(r.mode === 'zombi') { io.to(n).emit('gameOver', { msg: "Oda kapandı!" }); delete rooms[n]; }
+                    else { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag=false; }
                 }
             });
             io.to(n).emit('state', r);
