@@ -32,18 +32,12 @@ io.on('connection', (socket) => {
 
     socket.on('specialPower', () => {
         let r = rooms[socket.roomName]; 
-        // SAVAŞ MODUNDA ÖZEL GÜÇ KAPALI
-        if(!r || r.mode === 'savas') return; 
-        
+        if(!r || r.mode === 'savas' || r.mode === 'labirent') return; // Labirentte de kapalı
         let p = r.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastSpecial > 5000) { 
             p.lastSpecial = Date.now();
             io.to(socket.roomName).emit('specialEffect', {x: p.x + 12, y: p.y + 12});
             if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
-            for(let id in r.players) {
-                let target = r.players[id];
-                if(id !== socket.id && Math.hypot(target.x - p.x, target.y - p.y) < 100) target.hp -= 1;
-            }
         }
     });
 
@@ -63,11 +57,14 @@ io.on('connection', (socket) => {
         if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20; if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
         let walls = (r.mode === 'labirent' ? mazeWalls : []);
         if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
-        if(r.mode === 'labirent' && p.y < 50 && p.x < 50) io.to(socket.roomName).emit('winner', p.name + " Kazandı!");
+        // Labirent kazanma bölgesi (Sol Üst Köşe)
+        if(r.mode === 'labirent' && p.y < 40 && p.x < 40) io.to(socket.roomName).emit('winner', p.name + " Labirenti Çözdü!");
     });
 
     socket.on('fire', () => {
-        let r = rooms[socket.roomName]; let p = r?.players[socket.id];
+        let r = rooms[socket.roomName]; 
+        if(!r || r.mode === 'labirent') return; // Labirentte ateş kapalı
+        let p = r.players[socket.id];
         let rate = (r.mode === 'savas' ? 1000 : 200);
         if(p && p.hp > 0 && Date.now() - p.lastFire > rate) { 
             r.bullets.push({ x: p.x + 10, y: p.y + 10, dir: p.lastDir, owner: socket.id }); 
