@@ -34,6 +34,9 @@ io.on('connection', (socket) => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
         if(p && p.hp > 0 && Date.now() - p.lastSpecial > 5000) { 
             p.lastSpecial = Date.now();
+            // EFEKTİ GÖNDER
+            io.to(socket.roomName).emit('explosionEffect', {x: p.x + 12, y: p.y + 12, color: p.color});
+            
             if(r.mode === 'zombi') r.zombies = r.zombies.filter(z => Math.hypot(z.x - p.x, z.y - p.y) > 120);
             for(let id in r.players) {
                 let target = r.players[id];
@@ -58,7 +61,6 @@ io.on('connection', (socket) => {
         if (dir === 'up') nY -= 20; if (dir === 'down') nY += 20; if (dir === 'left') nX -= 20; if (dir === 'right') nX += 20;
         let walls = (r.mode === 'labirent' ? mazeWalls : []);
         if (!walls.some(w => nX < w.x+w.w && nX+25 > w.x && nY < w.y+w.h && nY+25 > w.y) && nX >= 5 && nX <= 370 && nY >= 0 && nY <= 375) { p.x = nX; p.y = nY; p.lastDir = dir; }
-        if(r.mode === 'labirent' && p.y < 50 && p.x < 50) io.to(socket.roomName).emit('winner', p.name + " Kazandı!");
     });
 
     socket.on('fire', () => {
@@ -73,15 +75,15 @@ io.on('connection', (socket) => {
     setInterval(() => {
         for(let n in rooms) {
             let r = rooms[n]; if(r.status !== 'playing') continue;
-            if(r.mode === 'zombi') {
-                if(r.zombies.length === 0) r.wave++; if(r.zombies.length < r.wave + 2) r.zombies.push({x: Math.random()*380, y: 10});
-                r.zombies.forEach(z => { let targets = Object.values(r.players).filter(p => p.hp > 0); if(targets.length > 0) { z.x += (z.x < targets[0].x ? 0.7 : -0.7); z.y += (z.y < targets[0].y ? 0.7 : -0.7); if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1; } });
-            }
             r.bullets.forEach((b, bi) => {
                 b.x += (b.dir==='left'?-15:(b.dir==='right'?15:0)); b.y += (b.dir==='up'?-15:(b.dir==='down'?15:0));
                 if(r.mode === 'zombi') r.zombies.forEach((z, zi) => { if(b.x < z.x+25 && b.x+8 > z.x && b.y < z.y+25 && b.y+8 > z.y) { r.zombies.splice(zi, 1); r.bullets.splice(bi, 1); } });
                 for(let id in r.players) { let p = r.players[id]; if(id !== b.owner && p.hp > 0 && b.x < p.x+25 && b.x+8 > p.x && b.y < p.y+25 && b.y+8 > p.y) { p.hp -= 1; r.bullets.splice(bi, 1); break; } }
             });
+            if(r.mode === 'zombi') {
+                if(r.zombies.length === 0) r.wave++; if(r.zombies.length < r.wave + 2) r.zombies.push({x: Math.random()*380, y: 10});
+                r.zombies.forEach(z => { let targets = Object.values(r.players).filter(p => p.hp > 0); if(targets.length > 0) { z.x += (z.x < targets[0].x ? 0.7 : -0.7); z.y += (z.y < targets[0].y ? 0.7 : -0.7); if(Math.hypot(z.x - targets[0].x, z.y - targets[0].y) < 20) targets[0].hp -= 0.1; } });
+            }
             io.to(n).emit('state', { players: r.players, mode: r.mode, bullets: r.bullets, zombies: r.zombies, walls: (r.mode==='labirent'?mazeWalls:[]), wave: r.wave });
         }
     }, 50);
