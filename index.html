@@ -3,86 +3,126 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none; box-sizing: border-box; }
-        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
-        #lobby { padding: 20px; }
-        #room-container { background: #222; border-radius: 10px; padding: 10px; margin: 10px auto; width: 90%; max-width: 300px; max-height: 150px; overflow-y: auto; }
-        .room-item { background: #333; margin: 5px; padding: 10px; border-radius: 5px; display: flex; justify-content: space-between; }
-        #start-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 5000; flex-direction: column; align-items: center; justify-content: center; }
+        * { touch-action: none; box-sizing: border-box; outline: none; }
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
+        #menu { position: fixed; inset: 0; background: #1a1a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        #game-container { display: none; margin: 0 auto; position: relative; width: 320px; }
         canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; border-radius: 8px; }
-        .btn { width: 60px; height: 60px; background: #444; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 20px; }
+        #player-list { position: absolute; top: 0; right: 0; width: 95px; background: rgba(0,0,0,0.8); font-size: 11px; padding: 5px; border-radius: 5px; text-align: left; border: 1px solid #4CAF50; z-index: 5; }
+        .btn { padding: 15px; border-radius: 10px; border: none; font-weight: bold; color: white; background: #444; }
+        #ui-layer { display: none; font-size: 18px; color: #FFD700; height: 40px; justify-content: center; align-items: center; font-weight: bold; }
+        #start-panel { display: none; background: #333; padding: 10px; border-radius: 10px; margin: 5px; }
+        input, select { padding: 12px; width: 240px; margin-bottom: 10px; border-radius: 8px; border: none; }
+        #admin-trigger { position: fixed; top: 0; right: 0; width: 40px; height: 40px; z-index: 2000; }
     </style>
 </head>
 <body>
-    <div id="admin-trigger" style="position:fixed; top:0; right:0; width:50px; height:50px; z-index:9999;" onclick="admin()"></div>
-
-    <div id="lobby">
-        <h2 style="color:#4CAF50">Osman PRO</h2>
-        <input type="text" id="un" placeholder="Adın" style="width:80%; padding:10px; margin:5px;">
-        <div id="room-container"><b>Aktif Odalar:</b><div id="rl"></div></div>
-        <input type="text" id="rn" placeholder="Oda Adı" style="width:80%; padding:10px; margin:5px;">
-        <select id="md" style="width:80%; padding:10px; margin:5px;">
-            <option value="zombi">Zombi (10 Can)</option>
-            <option value="bayrak">Bayrak (1 Can)</option>
-            <option value="vs">Savaş (3 Can)</option>
+    <div id="admin-trigger" onclick="openAdmin()"></div>
+    <div id="menu">
+        <h2 style="color:#4CAF50">Multiplayer Osman</h2>
+        <input type="text" id="uname" placeholder="Adın">
+        <div id="roomList" style="margin: 10px 0; max-height: 150px; overflow-y: auto; width: 260px;"></div>
+        <input type="text" id="rname" placeholder="Oda Adı">
+        <select id="mode">
+            <option value="zombi">Zombi Modu (10 Can)</option>
+            <option value="bayrak">Bayrak Kapmaca (1 Can)</option>
+            <option value="vs">Savaş - VS (3 Can)</option>
         </select>
-        <button onclick="join()" style="width:80%; padding:15px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">GİR / ODA KUR</button>
+        <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; color:white; font-weight:bold;">ODA KUR / GİR</button>
     </div>
 
     <div id="start-panel">
-        <h3 id="wm">DİĞER OYUNCULAR BEKLENİYOR...</h3>
-        <button id="sb" onclick="socket.emit('startGame')" style="display:none; padding:20px; background:#4CAF50; color:white; border:none; border-radius:10px; width:200px; font-weight:bold;">OYUNU BAŞLAT</button>
+        <p id="wait-msg">Kurucu başlatınca oyun açılacak...</p>
+        <button id="start-btn" onclick="socket.emit('startGame')" style="background:#4CAF50; padding:15px; border-radius:10px; display:none; width:100%; color:white; font-weight:bold;">OYUNU BAŞLAT</button>
     </div>
 
-    <div id="game-ui" style="display:none; padding-top:10px;">
-        <div id="st" style="color:gold; font-weight:bold;">Can: --</div>
+    <div id="ui-layer">Can: --</div>
+    <div id="game-container">
+        <div id="player-list"><b>Kişiler:</b><hr><div id="plist-content"></div></div>
         <canvas id="game" width="400" height="400"></canvas>
-        <div style="display:flex; flex-direction:column; align-items:center; gap:5px; margin-top:10px;">
-            <button class="btn" onpointerdown="socket.emit('move','up')">▲</button>
-            <div style="display:flex; gap:10px;">
-                <button class="btn" onpointerdown="socket.emit('move','left')">◀</button>
-                <button class="btn" onpointerdown="socket.emit('move','down')">▼</button>
-                <button class="btn" onpointerdown="socket.emit('move','right')">▶</button>
-            </div>
-            <button class="btn" style="background:#f44336; width:130px; margin-top:5px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
+    </div>
+
+    <div id="controls" style="display:none; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
+        <div style="display: grid; grid-template-areas: '. u .' 'l d r'; gap: 10px;">
+            <button class="btn" style="grid-area: u; width:65px; height:65px" onpointerdown="socket.emit('move','up')">▲</button>
+            <button class="btn" style="grid-area: l; width:65px; height:65px" onpointerdown="socket.emit('move','left')">◀</button>
+            <button class="btn" style="grid-area: d; width:65px; height:65px" onpointerdown="socket.emit('move','down')">▼</button>
+            <button class="btn" style="grid-area: r; width:65px; height:65px" onpointerdown="socket.emit('move','right')">▶</button>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:5px;">
+            <button id="fire-btn" class="btn" style="background:#f44336; width:120px; height:60px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
+            <button class="btn" style="background:#ff9800; width:60px; height:60px;" onpointerdown="socket.emit('specialPower')">B</button>
         </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const ctx = document.getElementById('game').getContext('2d');
+        const socket = io(); const ctx = document.getElementById('game').getContext('2d');
+        const WALLS = [{x: 60, y: 100, w: 20, h: 200}, {x: 320, y: 100, w: 20, h: 200}];
+
+        window.onload = () => {
+            if(localStorage.getItem('osman_nick')) document.getElementById('uname').value = localStorage.getItem('osman_nick');
+            if(localStorage.getItem('osman_room')) document.getElementById('rname').value = localStorage.getItem('osman_room');
+        };
+
+        function openAdmin() {
+            let pw = prompt("Şifre:");
+            if(pw === "123Osman123Burda") {
+                let action = prompt("kick [ID] veya clear");
+                if(action === 'clear') socket.emit('adminAction', {pw:pw, type:'clear'});
+                else if(action.startsWith('kick ')) socket.emit('adminAction', {pw:pw, type:'kick', targetId:action.split(' ')[1]});
+            }
+        }
+
+        window.addEventListener('keydown', e => {
+            const dirs = {w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right'};
+            if(dirs[e.key]) socket.emit('move', dirs[e.key]);
+            if(e.key === ' ') socket.emit('fire');
+            if(e.key.toLowerCase() === 'b') socket.emit('specialPower');
+        });
 
         function join(name) {
-            const u = document.getElementById('un').value;
-            const r = name || document.getElementById('rn').value;
-            if(!u || !r) return alert("Ad ve Oda gir!");
-            socket.emit('createRoom', {userName: u, roomName: r, mode: document.getElementById('md').value});
-            document.getElementById('lobby').style.display = 'none';
-            document.getElementById('game-ui').style.display = 'block';
-            document.getElementById('start-panel').style.display = 'flex';
+            const u = document.getElementById('uname').value;
+            const r = name || document.getElementById('rname').value;
+            if(!u || !r) return alert("Eksik bilgi!");
+            localStorage.setItem('osman_nick', u); localStorage.setItem('osman_room', r);
+            socket.emit('createRoom', {userName: u, roomName: r, mode: document.getElementById('mode').value});
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('start-panel').style.display = 'block';
+            document.getElementById('game-container').style.display = 'block';
+            document.getElementById('ui-layer').style.display = 'flex';
+            document.getElementById('controls').style.display = 'flex';
         }
 
         socket.on('roomList', list => {
-            const container = document.getElementById('rl'); container.innerHTML = "";
-            list.forEach(room => {
-                if(!room.started) container.innerHTML += `<div class="room-item"><span>${room.name} (${room.count})</span><button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; padding:5px; border-radius:3px;">GİR</button></div>`;
-            });
+            const container = document.getElementById('roomList'); container.innerHTML = "";
+            list.forEach(room => { if(!room.started) container.innerHTML += `<div style="background:#333; padding:8px; margin:4px; border-radius:5px; display:flex; justify-content:space-between; align-items:center;"><span>${room.name}</span><button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; padding:5px; border-radius:4px;">GİR</button></div>`; });
         });
 
-        socket.on('joined', d => { if(d.isHost) { document.getElementById('sb').style.display = 'block'; document.getElementById('wm').innerText = "KURUCU SENSİN"; } });
+        socket.on('joined', d => { if(d.isHost) document.getElementById('start-btn').style.display = 'block'; });
         socket.on('gameStarted', () => document.getElementById('start-panel').style.display = 'none');
+        socket.on('gameOver', d => { alert(d.msg); location.reload(); });
+        socket.on('specialEffect', p => {
+            let r = 0; let anim = setInterval(() => { ctx.strokeStyle = `rgba(0,255,255,${1-r/90})`; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke(); r+=10; if(r>90) clearInterval(anim); }, 30);
+        });
+
         socket.on('state', r => {
-            ctx.clearRect(0,0,400,400);
-            if(r.mode === 'bayrak') { ctx.fillStyle="#555"; [{x:80,y:120,w:15,h:160},{x:305,y:120,w:15,h:160}].forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h)); }
+            ctx.clearRect(0,0,400,400); let plist = "";
+            if(r.mode === 'bayrak') { ctx.fillStyle="#555"; WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); if(!r.flags.red.taken) { ctx.fillStyle="red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 20, 20); } if(!r.flags.blue.taken) { ctx.fillStyle="blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 20, 20); } }
             r.bullets.forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             r.zombies.forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in r.players) {
-                let p = r.players[id]; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                if(id === socket.id) document.getElementById('st').innerText = `CAN: ${p.hp} | MOD: ${r.mode.toUpperCase()}`;
+                let p = r.players[id]; plist += `<div style="color:${p.color}">${p.name} [${p.hp}] <br><small>ID:${p.id.substring(0,4)}</small></div>`;
+                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center"; ctx.fillText(p.name, p.x+12, p.y-8);
+                if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12,p.y-10,8,0,Math.PI*2); ctx.fill(); }
+                if(id === socket.id) {
+                    document.getElementById('ui-layer').innerText = (r.mode==='bayrak' ? `SKOR: 🔴${r.scores.red}-🔵${r.scores.blue} | CAN: ${p.hp}` : `CAN: ${p.hp}`);
+                    document.getElementById('fire-btn').style.opacity = p.hasFlag ? "0.3" : "1";
+                }
             }
+            document.getElementById('plist-content').innerHTML = plist;
         });
-        function admin() { if(prompt("Şifre:") === "123Osman123Burda") alert("Admin yetkisi aktif (Kickleme vb. konsoldan yapılabilir)"); }
     </script>
 </body>
 </html>
