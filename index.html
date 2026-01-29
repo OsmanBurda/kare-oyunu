@@ -126,7 +126,8 @@
                 ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center"; ctx.fillText(p.name, p.x+12, p.y-8);
                 if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12,p.y-10,8,0,Math.PI*2); ctx.fill(); }
                 if(id === socket.id) {
-                    document.getElementById('ui-layer').innerText = (r.mode==='bayrak' ? `SKOR: 🔴${r.scores.red}-🔵${r.scores.blue} | CAN: ${p.hp}` : `CAN: ${p.hp}`);
+                    let infoText = r.mode === 'zombi' ? `DALGA: ${r.wave-1} | CAN: ${p.hp}` : (r.mode==='bayrak' ? `SKOR: 🔴${r.scores.red}-🔵${r.scores.blue} | CAN: ${p.hp}` : `CAN: ${p.hp}`);
+                    document.getElementById('ui-layer').innerText = infoText;
                     document.getElementById('fire-btn').style.opacity = p.hasFlag ? "0.3" : "1";
                 }
             }
