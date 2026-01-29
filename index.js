@@ -104,23 +104,28 @@ io.on('connection', (socket) => {
             if(r.started) {
                 r.bullets.forEach((b, bi) => {
                     b.x += b.dx; b.y += b.dy;
+                    
+                    // MERMİ DUVAR ÇARPIŞMASI
+                    if(r.mode === 'bayrak' || r.mode === 'vs') {
+                        WALLS.forEach(w => {
+                            if(b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1);
+                        });
+                    }
+
                     if(r.mode === 'zombi') {
                         r.zombies.forEach((z, zi) => {
                             if(Math.hypot(b.x-z.x, b.y-z.y) < 25) { r.zombies.splice(zi,1); r.bullets.splice(bi,1); }
                         });
                     } else {
                         Object.values(r.players).forEach(p => {
-                            if(p.id !== b.owner && Math.hypot(b.x-p.x, b.y-p.y) < 20) { p.hp--; r.bullets.splice(bi,1); }
+                            if(p.hp > 0 && p.id !== b.owner && Math.hypot(b.x-p.x, b.y-p.y) < 20) { p.hp--; r.bullets.splice(bi,1); }
                         });
                     }
                     if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi,1);
                 });
 
                 if(r.mode === 'zombi') {
-                    if(r.zombies.length === 0) { 
-                        for(let i=0; i < r.wave * 4; i++) r.zombies.push(getZombieSpawn()); 
-                        r.wave++; 
-                    }
+                    if(r.zombies.length === 0) { for(let i=0; i < r.wave * 4; i++) r.zombies.push(getZombieSpawn()); r.wave++; }
                     r.zombies.forEach(z => {
                         let t = Object.values(r.players).filter(pl => pl.hp > 0)[0];
                         if(t) {
@@ -132,6 +137,7 @@ io.on('connection', (socket) => {
 
                 if(r.mode === 'bayrak') {
                     Object.values(r.players).forEach(p => {
+                        if(p.hp <= 0) { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag = false; return; }
                         let enemy = p.team === 'red' ? 'blue' : 'red';
                         if(!p.hasFlag && !r.flags[enemy].taken && Math.hypot(p.x-r.flags[enemy].x, p.y-r.flags[enemy].y)<25) { p.hasFlag = true; r.flags[enemy].taken = true; }
                         let base = (p.team==='red'?{x:30,y:190}:{x:350,y:190});
@@ -142,12 +148,17 @@ io.on('connection', (socket) => {
                     });
                 }
 
-                Object.values(r.players).forEach(p => {
-                    if(p.hp <= 0) {
-                        if(r.mode === 'zombi') { io.to(n).emit('gameOver', {msg: "Oyun Bitti! Dalga: " + (r.wave-1)}); delete rooms[n]; }
-                        else { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag = false; }
-                    }
-                });
+                if(r.mode === 'vs') {
+                    const redAlive = Object.values(r.players).some(p => p.team === 'red' && p.hp > 0);
+                    const blueAlive = Object.values(r.players).some(p => p.team === 'blue' && p.hp > 0);
+                    if(!redAlive) { io.to(n).emit('gameOver', {msg: "MAVİ TAKIM KAZANDI!"}); delete rooms[n]; }
+                    else if(!blueAlive) { io.to(n).emit('gameOver', {msg: "KIRMIZI TAKIM KAZANDI!"}); delete rooms[n]; }
+                }
+
+                if(r.mode === 'zombi') {
+                    const anyAlive = Object.values(r.players).some(p => p.hp > 0);
+                    if(!anyAlive) { io.to(n).emit('gameOver', {msg: "Oyun Bitti! Dalga: " + (r.wave-1)}); delete rooms[n]; }
+                }
             }
             io.to(n).emit('state', r);
         }
