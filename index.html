@@ -3,87 +3,86 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        * { touch-action: none; box-sizing: border-box; -webkit-user-select: none; }
-        body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; }
-        #game-container { display: none; margin: 10px auto; position: relative; width: 320px; }
-        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; border-radius: 8px; }
-        
-        /* OYUNCU LİSTESİ - SOL ÜSTE SABİTLENDİ */
-        #player-list { position: absolute; top: 5px; left: 5px; width: 80px; background: rgba(0,0,0,0.7); font-size: 10px; padding: 5px; border-radius: 4px; text-align: left; z-index: 10; pointer-events: none; }
-        
-        /* BAŞLAT BUTONU - EKRANIN ORTASINA */
-        #start-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.9); padding: 20px; border-radius: 10px; z-index: 2000; border: 2px solid #4CAF50; width: 280px; }
-        
+        * { touch-action: none; box-sizing: border-box; }
+        body { background: #121212; color: white; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
         #lobby { padding: 20px; }
-        input, select { width: 80%; padding: 12px; margin: 5px; border-radius: 5px; border: none; }
-        .btn { padding: 15px; border-radius: 10px; border: none; font-weight: bold; color: white; background: #444; width: 65px; height: 65px; }
+        #room-container { background: #222; border-radius: 10px; padding: 10px; margin: 10px auto; width: 90%; max-width: 300px; max-height: 150px; overflow-y: auto; }
+        .room-item { background: #333; margin: 5px; padding: 10px; border-radius: 5px; display: flex; justify-content: space-between; }
+        #start-panel { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 5000; flex-direction: column; align-items: center; justify-content: center; }
+        canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; border-radius: 8px; }
+        .btn { width: 60px; height: 60px; background: #444; color: white; border: none; border-radius: 10px; font-weight: bold; font-size: 20px; }
     </style>
 </head>
 <body>
+    <div id="admin-trigger" style="position:fixed; top:0; right:0; width:50px; height:50px; z-index:9999;" onclick="admin()"></div>
+
     <div id="lobby">
-        <h2 style="color:#4CAF50">Osman PRO Game</h2>
-        <input type="text" id="uname" placeholder="Adın">
-        <input type="text" id="rname" placeholder="Oda Adı">
-        <select id="mode">
-            <option value="zombi">Zombi</option>
-            <option value="bayrak">Bayrak</option>
-            <option value="vs">Savaş</option>
+        <h2 style="color:#4CAF50">Osman PRO</h2>
+        <input type="text" id="un" placeholder="Adın" style="width:80%; padding:10px; margin:5px;">
+        <div id="room-container"><b>Aktif Odalar:</b><div id="rl"></div></div>
+        <input type="text" id="rn" placeholder="Oda Adı" style="width:80%; padding:10px; margin:5px;">
+        <select id="md" style="width:80%; padding:10px; margin:5px;">
+            <option value="zombi">Zombi (10 Can)</option>
+            <option value="bayrak">Bayrak (1 Can)</option>
+            <option value="vs">Savaş (3 Can)</option>
         </select>
-        <button onclick="join()" style="background:#4CAF50; color:white; padding:15px; width:80%; border:none; border-radius:10px; font-weight:bold;">GİRİŞ YAP</button>
+        <button onclick="join()" style="width:80%; padding:15px; background:#4CAF50; color:white; border:none; border-radius:10px; font-weight:bold;">GİR / ODA KUR</button>
     </div>
 
     <div id="start-panel">
-        <p id="wait-msg">OYUNCULAR BEKLENİYOR...</p>
-        <button id="start-btn" onclick="socket.emit('startGame')" style="display:none; background:#4CAF50; color:white; padding:15px; width:100%; border:none; border-radius:10px; font-weight:bold;">OYUNU BAŞLAT</button>
+        <h3 id="wm">DİĞER OYUNCULAR BEKLENİYOR...</h3>
+        <button id="sb" onclick="socket.emit('startGame')" style="display:none; padding:20px; background:#4CAF50; color:white; border:none; border-radius:10px; width:200px; font-weight:bold;">OYUNU BAŞLAT</button>
     </div>
 
-    <div id="game-ui" style="display:none;">
-        <div id="status" style="color:gold; font-weight:bold; margin-bottom:5px;">Can: --</div>
-        <div id="game-container">
-            <div id="player-list"><b>Kişiler:</b><hr><div id="plist-content"></div></div>
-            <canvas id="game" width="400" height="400"></canvas>
+    <div id="game-ui" style="display:none; padding-top:10px;">
+        <div id="st" style="color:gold; font-weight:bold;">Can: --</div>
+        <canvas id="game" width="400" height="400"></canvas>
+        <div style="display:flex; flex-direction:column; align-items:center; gap:5px; margin-top:10px;">
+            <button class="btn" onpointerdown="socket.emit('move','up')">▲</button>
+            <div style="display:flex; gap:10px;">
+                <button class="btn" onpointerdown="socket.emit('move','left')">◀</button>
+                <button class="btn" onpointerdown="socket.emit('move','down')">▼</button>
+                <button class="btn" onpointerdown="socket.emit('move','right')">▶</button>
+            </div>
+            <button class="btn" style="background:#f44336; width:130px; margin-top:5px;" onpointerdown="socket.emit('fire')">ATEŞ 🔥</button>
         </div>
-        </div>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         const ctx = document.getElementById('game').getContext('2d');
 
-        function join() {
-            const u = document.getElementById('uname').value;
-            const r = document.getElementById('rname').value;
-            const m = document.getElementById('mode').value;
-            if(!u || !r) return alert("Eksik alan!");
-            
-            socket.emit('createRoom', {userName: u, roomName: r, mode: m});
+        function join(name) {
+            const u = document.getElementById('un').value;
+            const r = name || document.getElementById('rn').value;
+            if(!u || !r) return alert("Ad ve Oda gir!");
+            socket.emit('createRoom', {userName: u, roomName: r, mode: document.getElementById('md').value});
             document.getElementById('lobby').style.display = 'none';
             document.getElementById('game-ui').style.display = 'block';
-            document.getElementById('start-panel').style.display = 'block';
+            document.getElementById('start-panel').style.display = 'flex';
         }
 
-        socket.on('joined', data => {
-            if(data.isHost) {
-                document.getElementById('start-btn').style.display = 'block';
-                document.getElementById('wait-msg').innerText = "KURUCU SENSİN";
-            }
+        socket.on('roomList', list => {
+            const container = document.getElementById('rl'); container.innerHTML = "";
+            list.forEach(room => {
+                if(!room.started) container.innerHTML += `<div class="room-item"><span>${room.name} (${room.count})</span><button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; padding:5px; border-radius:3px;">GİR</button></div>`;
+            });
         });
 
-        socket.on('gameStarted', () => {
-            document.getElementById('start-panel').style.display = 'none';
-        });
-
+        socket.on('joined', d => { if(d.isHost) { document.getElementById('sb').style.display = 'block'; document.getElementById('wm').innerText = "KURUCU SENSİN"; } });
+        socket.on('gameStarted', () => document.getElementById('start-panel').style.display = 'none');
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400);
-            let plist = "";
+            if(r.mode === 'bayrak') { ctx.fillStyle="#555"; [{x:80,y:120,w:15,h:160},{x:305,y:120,w:15,h:160}].forEach(w=>ctx.fillRect(w.x,w.y,w.w,w.h)); }
+            r.bullets.forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
+            r.zombies.forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in r.players) {
-                let p = r.players[id];
-                plist += `<div>${p.name} [${Math.max(0, p.hp)}]</div>`;
-                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                if(id === socket.id) document.getElementById('status').innerText = `MOD: ${r.mode.toUpperCase()} | CAN: ${Math.max(0, p.hp)}`;
+                let p = r.players[id]; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                if(id === socket.id) document.getElementById('st').innerText = `CAN: ${p.hp} | MOD: ${r.mode.toUpperCase()}`;
             }
-            document.getElementById('plist-content').innerHTML = plist;
         });
+        function admin() { if(prompt("Şifre:") === "123Osman123Burda") alert("Admin yetkisi aktif (Kickleme vb. konsoldan yapılabilir)"); }
     </script>
 </body>
 </html>
