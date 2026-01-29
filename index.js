@@ -104,22 +104,13 @@ io.on('connection', (socket) => {
             if(r.started) {
                 r.bullets.forEach((b, bi) => {
                     b.x += b.dx; b.y += b.dy;
-                    
-                    // MERMİ DUVAR ÇARPIŞMASI
                     if(r.mode === 'bayrak' || r.mode === 'vs') {
-                        WALLS.forEach(w => {
-                            if(b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1);
-                        });
+                        WALLS.forEach(w => { if(b.x > w.x && b.x < w.x+w.w && b.y > w.y && b.y < w.y+w.h) r.bullets.splice(bi, 1); });
                     }
-
                     if(r.mode === 'zombi') {
-                        r.zombies.forEach((z, zi) => {
-                            if(Math.hypot(b.x-z.x, b.y-z.y) < 25) { r.zombies.splice(zi,1); r.bullets.splice(bi,1); }
-                        });
+                        r.zombies.forEach((z, zi) => { if(Math.hypot(b.x-z.x, b.y-z.y) < 25) { r.zombies.splice(zi,1); r.bullets.splice(bi,1); } });
                     } else {
-                        Object.values(r.players).forEach(p => {
-                            if(p.hp > 0 && p.id !== b.owner && Math.hypot(b.x-p.x, b.y-p.y) < 20) { p.hp--; r.bullets.splice(bi,1); }
-                        });
+                        Object.values(r.players).forEach(p => { if(p.hp > 0 && p.id !== b.owner && Math.hypot(b.x-p.x, b.y-p.y) < 20) { p.hp--; r.bullets.splice(bi,1); } });
                     }
                     if(b.x<0 || b.x>400 || b.y<0 || b.y>400) r.bullets.splice(bi,1);
                 });
@@ -135,9 +126,22 @@ io.on('connection', (socket) => {
                     });
                 }
 
+                Object.values(r.players).forEach(p => {
+                    if(p.hp <= 0) {
+                        // BAYRAK DÜZELTMESİ: Ölenin elinde bayrak varsa geri koy
+                        if(p.hasFlag) {
+                            let enemy = p.team === 'red' ? 'blue' : 'red';
+                            r.flags[enemy].taken = false;
+                            p.hasFlag = false;
+                        }
+                        if(r.mode === 'zombi') { /* Zombi modunda oyun biter */ }
+                        else if(r.mode === 'bayrak') { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; }
+                    }
+                });
+
                 if(r.mode === 'bayrak') {
                     Object.values(r.players).forEach(p => {
-                        if(p.hp <= 0) { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag = false; return; }
+                        if(p.hp <= 0) return;
                         let enemy = p.team === 'red' ? 'blue' : 'red';
                         if(!p.hasFlag && !r.flags[enemy].taken && Math.hypot(p.x-r.flags[enemy].x, p.y-r.flags[enemy].y)<25) { p.hasFlag = true; r.flags[enemy].taken = true; }
                         let base = (p.team==='red'?{x:30,y:190}:{x:350,y:190});
