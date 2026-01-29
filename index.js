@@ -73,7 +73,6 @@ io.on('connection', (socket) => {
             if(dir==='up') ny -= speed; if(dir==='down') ny += speed;
             if(dir==='left') nx -= speed; if(dir==='right') nx += speed;
             let hitWall = false;
-            // Savaş (VS) ve Bayrak modunda duvarlar aktif
             if(r.mode === 'bayrak' || r.mode === 'vs') {
                 WALLS.forEach(w => { if(nx < w.x+w.w && nx+25 > w.x && ny < w.y+w.h && ny+25 > w.y) hitWall = true; });
             }
@@ -122,6 +121,7 @@ io.on('connection', (socket) => {
                     r.zombies.forEach(z => {
                         let t = Object.values(r.players).filter(pl => pl.hp > 0)[0];
                         if(t) {
+                            // HIZ 0.5 OLARAK GÜNCELLENDİ
                             z.x += (z.x < t.x ? 0.5 : -0.5); z.y += (z.y < t.y ? 0.5 : -0.5);
                             if(Math.hypot(z.x-t.x, z.y-t.y) < 22 && Date.now()-t.lastHit > 1000) { t.hp = Math.max(0, t.hp-1); t.lastHit = Date.now(); }
                         }
