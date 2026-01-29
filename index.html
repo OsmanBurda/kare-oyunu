@@ -3,15 +3,7 @@
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
     <style>
-        /* KAYDIRMA VE SEÇME ENGELİ */
-        * { 
-            touch-action: none; 
-            box-sizing: border-box; 
-            outline: none; 
-            -webkit-touch-callout: none; 
-            -webkit-user-select: none; 
-            user-select: none;
-        }
+        * { touch-action: none; box-sizing: border-box; outline: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
         body { background: #121212; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         #menu { position: fixed; inset: 0; background: #1a1a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         #game-container { display: none; margin: 0 auto; position: relative; width: 320px; }
@@ -67,10 +59,8 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // JS İLE YAKINLAŞTIRMA ENGELİ
         document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
         document.addEventListener('gesturestart', (e) => e.preventDefault());
-
         const socket = io(); const ctx = document.getElementById('game').getContext('2d');
         const WALLS = [{x: 60, y: 100, w: 20, h: 200}, {x: 320, y: 100, w: 20, h: 200}];
 
@@ -122,10 +112,7 @@
 
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400); let plist = "";
-            if(r.mode === 'bayrak' || r.mode === 'vs') { 
-                ctx.fillStyle="#555"; 
-                WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); 
-            }
+            if(r.mode === 'bayrak' || r.mode === 'vs') { ctx.fillStyle="#555"; WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); }
             if(r.mode === 'bayrak') {
                 if(!r.flags.red.taken) { ctx.fillStyle="red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 20, 20); }
                 if(!r.flags.blue.taken) { ctx.fillStyle="blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 20, 20); }
@@ -133,14 +120,19 @@
             r.bullets.forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             r.zombies.forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in r.players) {
-                let p = r.players[id]; plist += `<div style="color:${p.color}">${p.name} [${p.hp}] <br><small>ID:${p.id.substring(0,4)}</small></div>`;
-                ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
-                ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center"; ctx.fillText(p.name, p.x+12, p.y-8);
-                if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12,p.y-10,8,0,Math.PI*2); ctx.fill(); }
+                let p = r.players[id]; 
+                if(p.hp > 0) {
+                    plist += `<div style="color:${p.color}">${p.name} [${p.hp}]</div>`;
+                    ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
+                    ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center"; ctx.fillText(p.name, p.x+12, p.y-8);
+                    if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12,p.y-10,8,0,Math.PI*2); ctx.fill(); }
+                } else {
+                    plist += `<div style="color:gray; text-decoration:line-through;">${p.name} [ÖLÜ]</div>`;
+                }
                 if(id === socket.id) {
                     let infoText = r.mode === 'zombi' ? `DALGA: ${r.wave-1} | CAN: ${p.hp}` : (r.mode==='bayrak' ? `SKOR: 🔴${r.scores.red}-🔵${r.scores.blue} | CAN: ${p.hp}` : `CAN: ${p.hp}`);
                     document.getElementById('ui-layer').innerText = infoText;
-                    document.getElementById('fire-btn').style.opacity = p.hasFlag ? "0.3" : "1";
+                    document.getElementById('fire-btn').style.opacity = (p.hasFlag || p.hp <= 0) ? "0.3" : "1";
                 }
             }
             document.getElementById('plist-content').innerHTML = plist;
