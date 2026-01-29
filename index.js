@@ -128,14 +128,8 @@ io.on('connection', (socket) => {
 
                 Object.values(r.players).forEach(p => {
                     if(p.hp <= 0) {
-                        // BAYRAK DÜZELTMESİ: Ölenin elinde bayrak varsa geri koy
-                        if(p.hasFlag) {
-                            let enemy = p.team === 'red' ? 'blue' : 'red';
-                            r.flags[enemy].taken = false;
-                            p.hasFlag = false;
-                        }
-                        if(r.mode === 'zombi') { /* Zombi modunda oyun biter */ }
-                        else if(r.mode === 'bayrak') { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; }
+                        if(p.hasFlag) { let enemy = p.team === 'red' ? 'blue' : 'red'; r.flags[enemy].taken = false; p.hasFlag = false; }
+                        if(r.mode === 'bayrak') { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; }
                     }
                 });
 
