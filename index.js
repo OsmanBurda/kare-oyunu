@@ -73,14 +73,16 @@ io.on('connection', (socket) => {
             if(dir==='up') ny -= speed; if(dir==='down') ny += speed;
             if(dir==='left') nx -= speed; if(dir==='right') nx += speed;
             let hitWall = false;
-            if(r.mode === 'bayrak') WALLS.forEach(w => { if(nx<w.x+w.w && nx+20>w.x && ny<w.y+w.h && ny+20>w.y) hitWall = true; });
+            // Savaş (VS) ve Bayrak modunda duvarlar aktif
+            if(r.mode === 'bayrak' || r.mode === 'vs') {
+                WALLS.forEach(w => { if(nx < w.x+w.w && nx+25 > w.x && ny < w.y+w.h && ny+25 > w.y) hitWall = true; });
+            }
             if(!hitWall) { p.x = Math.max(0, Math.min(375, nx)); p.y = Math.max(0, Math.min(375, ny)); }
         }
     });
 
     socket.on('fire', () => {
         let r = rooms[socket.roomName]; let p = r?.players[socket.id];
-        // KRİTİK GÜNCELLEME: !p.hasFlag kontrolü eklendi (Bayrak varken ateş edemez)
         if(p && p.hp > 0 && r.started && !p.hasFlag && Date.now() - p.lastFire > 1000) {
             p.lastFire = Date.now();
             let bDirs = r.mode === 'bayrak' ? [[0,-10],[0,10],[-10,0],[10,0]] : [{up:[0,-10],down:[0,10],left:[-10,0],right:[10,0]}[p.lastDir]];
