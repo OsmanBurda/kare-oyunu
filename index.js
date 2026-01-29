@@ -117,7 +117,6 @@ io.on('connection', (socket) => {
                 });
 
                 if(r.mode === 'zombi') {
-                    // DALGA SİSTEMİ GERİ GELDİ
                     if(r.zombies.length === 0) { 
                         for(let i=0; i < r.wave * 4; i++) r.zombies.push(getZombieSpawn()); 
                         r.wave++; 
