@@ -8,7 +8,8 @@
         #menu { position: fixed; inset: 0; background: #1a1a1a; z-index: 1000; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         #game-container { display: none; margin: 0 auto; position: relative; width: 320px; }
         canvas { background: #222; border: 3px solid #4CAF50; width: 320px; height: 320px; border-radius: 8px; }
-        #player-list { position: absolute; top: 0; right: 0; width: 95px; background: rgba(0,0,0,0.8); font-size: 11px; padding: 5px; border-radius: 5px; text-align: left; border: 1px solid #4CAF50; z-index: 5; }
+        #player-list { position: absolute; top: 0; right: -100px; width: 95px; background: rgba(0,0,0,0.8); font-size: 11px; padding: 5px; border-radius: 5px; text-align: left; border: 1px solid #4CAF50; z-index: 5; }
+        #how-to-play { position: absolute; top: 130px; right: -100px; width: 95px; background: rgba(0,0,0,0.8); font-size: 10px; padding: 5px; border-radius: 5px; text-align: left; border: 1px solid #ff9800; color: #eee; }
         .btn { padding: 15px; border-radius: 10px; border: none; font-weight: bold; color: white; background: #444; }
         #ui-layer { display: none; font-size: 18px; color: #FFD700; height: 40px; justify-content: center; align-items: center; font-weight: bold; }
         #start-panel { display: none; background: #333; padding: 10px; border-radius: 10px; margin: 5px; }
@@ -39,6 +40,7 @@
     <div id="ui-layer">Can: --</div>
     <div id="game-container">
         <div id="player-list"><b>Kişiler:</b><hr><div id="plist-content"></div></div>
+        <div id="how-to-play"><b>REHBER</b><hr>WASD/Ok: Hareket<br>Boşluk: Ateş🔥<br><b>B: Özel Güç✨</b></div>
         <canvas id="game" width="400" height="400"></canvas>
     </div>
 
@@ -108,7 +110,14 @@
 
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400); let plist = "";
-            if(r.mode === 'bayrak') { ctx.fillStyle="#555"; WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); if(!r.flags.red.taken) { ctx.fillStyle="red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 20, 20); } if(!r.flags.blue.taken) { ctx.fillStyle="blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 20, 20); } }
+            if(r.mode === 'bayrak' || r.mode === 'vs') { 
+                ctx.fillStyle="#555"; 
+                WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); 
+            }
+            if(r.mode === 'bayrak') {
+                if(!r.flags.red.taken) { ctx.fillStyle="red"; ctx.fillRect(r.flags.red.x, r.flags.red.y, 20, 20); }
+                if(!r.flags.blue.taken) { ctx.fillStyle="blue"; ctx.fillRect(r.flags.blue.x, r.flags.blue.y, 20, 20); }
+            }
             r.bullets.forEach(b => { ctx.fillStyle="yellow"; ctx.fillRect(b.x, b.y, 8, 8); });
             r.zombies.forEach(z => { ctx.fillStyle="#4CAF50"; ctx.fillRect(z.x, z.y, 25, 25); });
             for(let id in r.players) {
