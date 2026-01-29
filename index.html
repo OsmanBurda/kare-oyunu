@@ -31,19 +31,16 @@
         </select>
         <button onclick="join()" style="background:#4CAF50; width:240px; padding:15px; border-radius:10px; color:white; font-weight:bold;">ODA KUR / GİR</button>
     </div>
-
     <div id="start-panel">
         <p id="wait-msg">Kurucu başlatınca oyun açılacak...</p>
         <button id="start-btn" onclick="socket.emit('startGame')" style="background:#4CAF50; padding:15px; border-radius:10px; display:none; width:100%; color:white; font-weight:bold;">OYUNU BAŞLAT</button>
     </div>
-
     <div id="ui-layer">Can: --</div>
     <div id="game-container">
         <div id="player-list"><b>Kişiler:</b><hr><div id="plist-content"></div></div>
         <div id="how-to-play"><b>REHBER</b><hr>WASD/Ok: Hareket<br>Boşluk: Ateş🔥<br><b>B: Özel Güç✨</b></div>
         <canvas id="game" width="400" height="400"></canvas>
     </div>
-
     <div id="controls" style="display:none; flex-direction: column; align-items: center; gap: 5px; margin-top: 5px;">
         <div style="display: grid; grid-template-areas: '. u .' 'l d r'; gap: 10px;">
             <button class="btn" style="grid-area: u; width:65px; height:65px" onpointerdown="socket.emit('move','up')">▲</button>
@@ -56,19 +53,11 @@
             <button class="btn" style="background:#ff9800; width:60px; height:60px;" onpointerdown="socket.emit('specialPower')">B</button>
         </div>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script>
         document.addEventListener('touchstart', (e) => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
-        document.addEventListener('gesturestart', (e) => e.preventDefault());
         const socket = io(); const ctx = document.getElementById('game').getContext('2d');
         const WALLS = [{x: 60, y: 100, w: 20, h: 200}, {x: 320, y: 100, w: 20, h: 200}];
-
-        window.onload = () => {
-            if(localStorage.getItem('osman_nick')) document.getElementById('uname').value = localStorage.getItem('osman_nick');
-            if(localStorage.getItem('osman_room')) document.getElementById('rname').value = localStorage.getItem('osman_room');
-        };
-
         function openAdmin() {
             let pw = prompt("Şifre:");
             if(pw === "123Osman123Burda") {
@@ -77,19 +66,16 @@
                 else if(action.startsWith('kick ')) socket.emit('adminAction', {pw:pw, type:'kick', targetId:action.split(' ')[1]});
             }
         }
-
         window.addEventListener('keydown', e => {
             const dirs = {w:'up', s:'down', a:'left', d:'right', ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right'};
             if(dirs[e.key]) socket.emit('move', dirs[e.key]);
             if(e.key === ' ') socket.emit('fire');
             if(e.key.toLowerCase() === 'b') socket.emit('specialPower');
         });
-
         function join(name) {
             const u = document.getElementById('uname').value;
             const r = name || document.getElementById('rname').value;
             if(!u || !r) return alert("Eksik bilgi!");
-            localStorage.setItem('osman_nick', u); localStorage.setItem('osman_room', r);
             socket.emit('createRoom', {userName: u, roomName: r, mode: document.getElementById('mode').value});
             document.getElementById('menu').style.display = 'none';
             document.getElementById('start-panel').style.display = 'block';
@@ -97,19 +83,13 @@
             document.getElementById('ui-layer').style.display = 'flex';
             document.getElementById('controls').style.display = 'flex';
         }
-
         socket.on('roomList', list => {
             const container = document.getElementById('roomList'); container.innerHTML = "";
             list.forEach(room => { if(!room.started) container.innerHTML += `<div style="background:#333; padding:8px; margin:4px; border-radius:5px; display:flex; justify-content:space-between; align-items:center;"><span>${room.name}</span><button onclick="join('${room.name}')" style="background:#4CAF50; border:none; color:white; padding:5px; border-radius:4px;">GİR</button></div>`; });
         });
-
         socket.on('joined', d => { if(d.isHost) document.getElementById('start-btn').style.display = 'block'; });
         socket.on('gameStarted', () => document.getElementById('start-panel').style.display = 'none');
         socket.on('gameOver', d => { alert(d.msg); location.reload(); });
-        socket.on('specialEffect', p => {
-            let r = 0; let anim = setInterval(() => { ctx.strokeStyle = `rgba(0,255,255,${1-r/90})`; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI*2); ctx.stroke(); r+=10; if(r>90) clearInterval(anim); }, 30);
-        });
-
         socket.on('state', r => {
             ctx.clearRect(0,0,400,400); let plist = "";
             if(r.mode === 'bayrak' || r.mode === 'vs') { ctx.fillStyle="#555"; WALLS.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h)); }
@@ -126,9 +106,7 @@
                     ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, 25, 25);
                     ctx.fillStyle = "white"; ctx.font = "bold 12px Arial"; ctx.textAlign="center"; ctx.fillText(p.name, p.x+12, p.y-8);
                     if(p.hasFlag) { ctx.fillStyle="gold"; ctx.beginPath(); ctx.arc(p.x+12,p.y-10,8,0,Math.PI*2); ctx.fill(); }
-                } else {
-                    plist += `<div style="color:gray; text-decoration:line-through;">${p.name} [ÖLÜ]</div>`;
-                }
+                } else { plist += `<div style="color:gray; text-decoration:line-through;">${p.name} [ÖLÜ]</div>`; }
                 if(id === socket.id) {
                     let infoText = r.mode === 'zombi' ? `DALGA: ${r.wave-1} | CAN: ${p.hp}` : (r.mode==='bayrak' ? `SKOR: 🔴${r.scores.red}-🔵${r.scores.blue} | CAN: ${p.hp}` : `CAN: ${p.hp}`);
                     document.getElementById('ui-layer').innerText = infoText;
