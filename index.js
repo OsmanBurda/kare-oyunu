@@ -117,11 +117,14 @@ io.on('connection', (socket) => {
                 });
 
                 if(r.mode === 'zombi') {
-                    if(r.zombies.length === 0) { for(let i=0; i<r.wave*4; i++) r.zombies.push(getZombieSpawn()); r.wave++; }
+                    // DALGA SİSTEMİ GERİ GELDİ
+                    if(r.zombies.length === 0) { 
+                        for(let i=0; i < r.wave * 4; i++) r.zombies.push(getZombieSpawn()); 
+                        r.wave++; 
+                    }
                     r.zombies.forEach(z => {
                         let t = Object.values(r.players).filter(pl => pl.hp > 0)[0];
                         if(t) {
-                            // HIZ 0.5 OLARAK GÜNCELLENDİ
                             z.x += (z.x < t.x ? 0.5 : -0.5); z.y += (z.y < t.y ? 0.5 : -0.5);
                             if(Math.hypot(z.x-t.x, z.y-t.y) < 22 && Date.now()-t.lastHit > 1000) { t.hp = Math.max(0, t.hp-1); t.lastHit = Date.now(); }
                         }
@@ -142,7 +145,7 @@ io.on('connection', (socket) => {
 
                 Object.values(r.players).forEach(p => {
                     if(p.hp <= 0) {
-                        if(r.mode === 'zombi') { io.to(n).emit('gameOver', {msg: "Oyun Bitti!"}); delete rooms[n]; }
+                        if(r.mode === 'zombi') { io.to(n).emit('gameOver', {msg: "Oyun Bitti! Dalga: " + (r.wave-1)}); delete rooms[n]; }
                         else { p.hp = p.maxHP; p.x = (p.team==='red'?40:340); p.y = 190; p.hasFlag = false; }
                     }
                 });
